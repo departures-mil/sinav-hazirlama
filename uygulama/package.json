@@ -1,0 +1,15 @@
+{
+  "name": "sinav-hazirlama",
+  "productName": "Sinav Hazirlama Sistemi",
+  "version": "1.9.0",
+  "description": "Çoktan seçmeli sınav hazırlama, çeviri ve çıktı uygulaması",
+  "main": "boot.js",
+  "author": "departures-mil",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "docx-preview": "^0.4.1",
+    "jszip": "^3.10.2",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.10.38"
+  }
+}

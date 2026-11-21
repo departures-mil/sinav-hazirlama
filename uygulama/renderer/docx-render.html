@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script>
+  // yamalı açılışta kitaplıklar ana paketin node_modules klasöründen (adres ?lib= ile gelir)
+  (function () {
+    var lib = new URLSearchParams(location.search).get('lib') || '../node_modules/';
+    document.write('<script src="' + lib + 'jszip/dist/jszip.min.js"><\/script><script src="' + lib + 'docx-preview/dist/docx-preview.min.js"><\/script>');
+  })();
+</script>
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; }
+  .docx-wrapper { background: transparent !important; padding: 0 !important; display: block !important; }
+  .docx-wrapper > section.docx { box-shadow: none !important; margin: 0 !important; break-after: page; page-break-after: always; overflow: hidden; position: relative; box-sizing: border-box; }
+  .wm { position: absolute; left: 50%; top: 50%; pointer-events: none; white-space: nowrap; z-index: 0; transform-origin: center center; }
+</style>
+</head>
+<body>
+<div id="c"></div>
+<script>
+window.renderDocx = async (b64, info) => {
+  const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  await docx.renderAsync(bin, document.getElementById('c'), null, {
+    inWrapper: true, ignoreWidth: false, ignoreHeight: false, renderHeaders: true, renderFooters: true,
+    breakPages: true, ignoreLastRenderedPageBreak: true, experimental: true, useBase64URL: true,
+  });
+  const sections = document.querySelectorAll('section.docx');
+  sections.forEach((s) => {
+    s.style.width = info.widthPt + 'pt';
+    s.style.height = info.heightPt + 'pt';
+    s.style.minHeight = '';
+    (info.watermarks || []).forEach((w) => {
+      const el = document.createElement(w.kind === 'text' ? 'div' : 'img');
+      el.className = 'wm';
+      if (w.kind === 'text') {
+        el.textContent = w.text;
+        el.style.fontFamily = `"${w.font}", Calibri, Arial, sans-serif`;
+        el.style.fontWeight = 'bold';
+        el.style.color = w.color && w.color.startsWith('#') ? w.color : (w.color || 'silver');
+        el.style.opacity = w.opacity;
+        el.style.fontSize = '100px';
+        s.appendChild(el);
+        const target = info.widthPt * 1.333 * 0.8; // px
+        el.style.fontSize = Math.max(20, Math.floor(100 * target / el.offsetWidth)) + 'px';
+        el.style.transform = `translate(-50%, -50%) rotate(${w.rotation || 0}deg)`;
+      } else {
+        el.src = w.src;
+        el.style.width = (info.widthPt * 0.7) + 'pt';
+        el.style.opacity = w.washout ? 0.3 : 1;
+        el.style.transform = 'translate(-50%, -50%)';
+        s.appendChild(el);
+      }
+    });
+  });
+  await Promise.all([...document.images].map((im) => im.complete ? 0 : new Promise((r) => { im.onload = im.onerror = r; })));
+  await document.fonts.ready;
+  return sections.length;
+};
+</script>
+</body>
+</html>

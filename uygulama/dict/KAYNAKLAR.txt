@@ -1,0 +1,5 @@
+Yazım denetimi sözlükleri
+- en.aff / en.dic: dictionary-en 4.0.0 (SCOWL en_US Hunspell), lisans: en-LICENSE.txt
+- en-words.txt: an-array-of-english-words 2.0.0 (~275.000 kelime), lisans: en-words-LICENSE.txt
+- tr-words.txt: OpenSubtitles 2018 sıklık listesi (hermitdave/FrequencyWords, CC BY-SA 4.0), dictionary-tr 2.0.0 (Hunspell, lisans: tr-LICENSE.txt) ile doğrulanan kelimeler, sıklığa göre sıralı
+- ar-words.txt: OpenSubtitles 2018 Arapça sıklık listesi (hermitdave/FrequencyWords, CC BY-SA 4.0), en az 5 kez geçen kelimeler, harekesiz, sıklığa göre sıralı

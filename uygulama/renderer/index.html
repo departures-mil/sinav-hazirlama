@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="tr" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Sınav Hazırlama Sistemi</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">✎</span><div><div class="appname"><span data-i18n="appTitle"></span> <span class="ver" id="appVer"></span></div><div class="filename" id="fileName"></div></div></div>
+  <div class="group">
+    <button id="btnNew" class="tb"><span class="ic">＋</span><span data-i18n="new"></span></button>
+    <button id="btnOpen" class="tb"><span class="ic">📂</span><span data-i18n="open"></span></button>
+    <button id="btnSave" class="tb"><span class="ic">💾</span><span data-i18n="save"></span></button>
+    <button id="btnSaveAs" class="tb"><span data-i18n="saveAs"></span></button>
+  </div>
+  <div class="group">
+    <button id="btnImport" class="tb"><span class="ic">📥</span><span data-i18n="import"></span></button>
+    <button id="btnTemplate" class="tb"><span class="ic">🖼</span><span data-i18n="template"></span></button>
+    <button id="btnTranslateAll" class="tb"><span class="ic">🌐</span><span data-i18n="translateAll"></span></button>
+    <button id="btnOutput" class="tb primary"><span class="ic">🖨</span><span data-i18n="output"></span></button>
+    <button id="btnSettings" class="tb"><span class="ic">⚙</span><span data-i18n="settings"></span></button>
+    <button id="btnCloud" class="tb cloudbtn" data-st="off"><span class="ic">☁</span><span data-i18n="cloud"></span><i class="dot"></i></button>
+    <button id="btnUpdate" class="tb updbtn" style="display:none"><span class="ic">🔄</span><span class="lbl"></span><i class="dot"></i></button>
+  </div>
+  <div class="group end">
+    <label class="sel"><span data-i18n="uiLang"></span><select id="uiLang"></select></label>
+    <label class="sel"><span data-i18n="contentLang"></span><select id="contentLang"></select></label>
+    <button id="btnFind" class="tb icon" data-i18n-title="findTip">🔍</button>
+    <button id="btnUndo" class="tb icon" data-i18n-title="undo">↶</button>
+    <button id="btnFull" class="tb icon" data-i18n-title="fullscreen">⛶</button>
+    <button id="btnQuit" class="tb icon danger" data-i18n-title="quit">✕</button>
+  </div>
+</header>
+
+<div class="main">
+  <aside class="side">
+    <div class="stats" id="stats"></div>
+    <div class="navgrid" id="navGrid"></div>
+    <div class="sidetools">
+      <div class="sidehead" data-i18n="tools"></div>
+      <button id="btnSelAll" class="sb" data-i18n="selectAll"></button>
+      <button id="btnSelNone" class="sb" data-i18n="selectNone"></button>
+      <button id="btnDelSel" class="sb danger" data-i18n="deleteSelected"></button>
+      <button id="btnShuffleQ" class="sb" data-i18n="shuffleQuestions"></button>
+      <button id="btnShuffleO" class="sb" data-i18n="shuffleAllOptions"></button>
+      <button id="btnTrSel" class="sb">🌐 <span data-i18n="bulkTr"></span></button>
+    </div>
+  </aside>
+
+  <main class="editor" id="editor">
+    <section class="card examinfo" id="examInfo">
+      <h3 data-i18n="examInfo"></h3>
+      <div class="grid2">
+        <label><span data-i18n="school"></span><input id="fSchool" type="text" dir="auto"></label>
+        <label><span data-i18n="examTitle"></span><input id="fTitle" type="text" dir="auto" data-i18n-ph="examTitlePh"></label>
+      </div>
+      <label><span data-i18n="instructions"></span><textarea id="fInstr" rows="2" dir="auto" data-i18n-ph="instructionsPh"></textarea></label>
+    </section>
+
+    <section class="card settingsInline" id="settingsCard"></section>
+
+    <nav class="tabs">
+      <button data-tab="test">📝 <span data-i18n="tabTest"></span> <em id="cntTest"></em></button>
+      <button data-tab="scen">📖 <span data-i18n="tabScen"></span> <em id="cntScen"></em></button>
+      <button data-tab="vocab">🔤 <span data-i18n="tabVocab"></span> <em id="cntVocab"></em></button>
+    </nav>
+
+    <div id="testPane">
+      <div id="qList"></div>
+      <div class="empty" id="emptyMsg" data-i18n="emptyList"></div>
+      <button class="addq" id="btnAddQ" data-i18n="addQuestion"></button>
+      <div class="row autobar"><button class="btn primary" id="btnAutoQ" data-i18n="autoQ"></button><button class="btn" id="btnArchQ" data-i18n="archiveQ"></button></div>
+
+      <section class="card keypanel" id="keyPanel">
+        <h3>🔑 <span data-i18n="answerKey"></span></h3>
+        <p class="hint" data-i18n="answerKeyHint"></p>
+        <div class="keygrid" id="keyGrid"></div>
+      </section>
+    </div>
+
+    <div id="scenPane">
+      <div class="tplbar"><span id="scenTplInfo"></span><button class="btn" id="btnScenTpl">🖼 <span data-i18n="template"></span></button></div>
+      <div id="sList"></div>
+      <div class="empty" id="scenEmpty" data-i18n="scenEmpty"></div>
+      <button class="addq" id="btnAddScen" data-i18n="addScenario"></button>
+      <div class="row autobar"><button class="btn primary" id="btnAutoS" data-i18n="autoS"></button><button class="btn" id="btnArchS" data-i18n="archiveS"></button></div>
+      <section class="card">
+        <label class="notelbl"><span data-i18n="scenNote"></span><textarea id="fScenNote" rows="2"></textarea></label>
+      </section>
+      <section class="card keypanel" id="scenSummary">
+        <h3>🔑 <span data-i18n="scenSummary"></span></h3>
+        <p class="hint" data-i18n="scenSummaryHint"></p>
+        <div id="scenSummaryTable"></div>
+      </section>
+    </div>
+
+    <div id="vocabPane">
+      <section class="card vocab">
+        <div class="grid2">
+          <label><span data-i18n="vocabSection"></span><input id="fVocabTitle" type="text"></label>
+          <label><span data-i18n="vocabPtsLabel"></span><input id="fVocabPts" type="number" min="0" step="0.5" style="max-width:140px"></label>
+        </div>
+        <p class="hint" data-i18n="vocabHint"></p>
+        <div class="row vbar">
+          <button class="btn primary" id="btnVocabImport" data-i18n="vocabImport"></button>
+          <button class="btn" id="btnVocabCheck" data-i18n="vocabCheck"></button>
+          <button class="btn" id="btnVocabDedupe" data-i18n="vocabDedupe"></button>
+          <button class="btn" id="btnVocabAllOn" data-i18n="vocabAllOn"></button>
+          <button class="btn" id="btnVocabAllOff" data-i18n="vocabAllOff"></button>
+          <button class="btn" id="btnVocabFill" style="display:none"></button>
+          <span class="vactive" id="vocabActive"></span>
+        </div>
+        <div class="row vcolbar">
+          <b data-i18n="vocabCols"></b>
+          <span class="vcol"><b class="fixed">EN</b> <span data-i18n="vocabColEn"></span></span>
+          <label class="vcol"><span class="sw"><input type="checkbox" id="vcAr"><span></span></span> <span data-i18n="vocabColAr"></span></label>
+          <label class="vcol"><span class="sw"><input type="checkbox" id="vcTr"><span></span></span> <span data-i18n="vocabColTr"></span></label>
+          <span class="hint" data-i18n="vocabColsHint"></span>
+        </div>
+        <div class="row vlvlbar" id="vocabLevels"></div>
+        <div id="vocabWarn" class="vwarn"></div>
+        <table class="vtable">
+          <thead><tr id="vocabHead"></tr></thead>
+          <tbody id="vocabRows"></tbody>
+        </table>
+        <div class="empty" id="vocabEmpty" data-i18n="vocabEmpty"></div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn primary" id="btnAddVocab" data-i18n="addVocab"></button>
+          <button class="btn" id="btnAddVocab10" data-i18n="addVocab10"></button>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toasts"></div>
+
+<script src="i18n.js"></script>
+<script src="parser.js"></script>
+<script src="scenario-parser.js"></script>
+<script src="vocab-tools.js"></script>
+<script src="c2-words.js"></script>
+<script src="oxford-words.js"></script>
+<script src="aviation-words.js"></script>
+<script src="bank-data.js"></script>
+<script src="bank.js"></script>
+<script src="doc-scan.js"></script>
+<script src="spell.js"></script>
+<script src="render.js"></script>
+<script src="update-source.js"></script>
+<script src="cloud.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
