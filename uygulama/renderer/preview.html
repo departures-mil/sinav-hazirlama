@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Önizleme</title>
+<style>
+  html, body { margin: 0; height: 100%; font-family: "Segoe UI", Tahoma, Arial, sans-serif; background: #525659; }
+  body { display: flex; flex-direction: column; }
+  .bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; background: #1f2d3d; color: #fff; }
+  .bar button { border: 0; border-radius: 6px; padding: 7px 12px; font-size: 14px; cursor: pointer; background: #e9eef4; color: #1f2d3d; }
+  .bar button.primary { background: #2f80ed; color: #fff; }
+  .bar button.on { background: #f2c94c; color: #1f2d3d; font-weight: 600; }
+  .bar button:disabled { opacity: .45; cursor: default; }
+  .bar .sep { width: 1px; height: 26px; background: #4a5d70; margin: 0 4px; }
+  .bar .grow { flex: 1; }
+  .hint { padding: 6px 12px; background: #fff8dc; color: #5a4a00; font-size: 13px; border-bottom: 1px solid #e6d9a2; }
+  .hint.ok { background: #e8f7ee; color: #1d5b33; border-color: #b7e2c6; }
+  .hint.err { background: #fdecea; color: #8a1c13; border-color: #f2b8b1; }
+  .stage { flex: 1; position: relative; }
+  .stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #525659; }
+  .pages { position: absolute; inset: 0; overflow: auto; padding: 8px; text-align: center; }
+  .pages canvas { display: block; margin: 0 auto 10px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+  .hint button { margin-inline-start: 8px; border: 1px solid #9fc9ab; background: #fff; border-radius: 6px; padding: 3px 10px; }
+  .edit-only { display: none; }
+  body.editing .edit-only { display: inline-block; }
+  body.editing .view-only { display: none; }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <button id="bEdit">✏ Düzenle</button>
+    <span class="sep edit-only"></span>
+    <button id="bBreak" class="edit-only" title="İmlecin bulunduğu yerden sonrasını yeni sayfaya taşır">⤓ Sayfa sonu ekle</button>
+    <button id="bSpace" class="edit-only" title="İmlecin bulunduğu yere boş satır ekler">↵ Boş satır ekle</button>
+    <button id="bDelBreak" class="edit-only" title="Eklenen sayfa sonlarını ve boş satırları kaldırır">✖ Eklenenleri temizle</button>
+    <button id="bApply" class="primary edit-only">✔ Önizlemeyi güncelle</button>
+    <button id="bCancel" class="edit-only">Vazgeç</button>
+    <span class="grow"></span>
+    <button id="bReset" title="Yapılan tüm düzenlemeleri geri alır">↺ Orijinale dön</button>
+    <button id="bZoom" class="view-only" style="display:none">🔍 100%</button>
+    <button id="bExt" class="view-only" title="PDF'i bilgisayardaki PDF programında açar">⧉ Dış programda aç</button>
+    <button id="bSave" class="primary">💾 PDF olarak kaydet</button>
+  </div>
+  <div id="hint" class="hint">İçerik, şablonun üst ve alt bilgisinin dışına otomatik yerleştirildi. Bir şeyi değiştirmek isterseniz “✏ Düzenle” düğmesine basın.</div>
+  <div class="stage">
+    <iframe id="pdf"></iframe>
+    <div id="pages" class="pages" style="display:none"></div>
+    <iframe id="ed" style="display:none"></iframe>
+  </div>
+<script>
+'use strict';
+// Telefonda önizleme ana uygulamanın içinde açılır; PDF, pdf.js ile sayfa sayfa çizilir
+if (!window.pv && window.parent !== window && window.parent.mobilePv) window.pv = window.parent.mobilePv;
+const INLINE = !!(window.pv && window.pv.inline);
+const id = new URLSearchParams(location.search).get('id');
+const $ = (s) => document.getElementById(s);
+let info = null;
+
+const HINT_VIEW = 'İçerik, şablonun üst ve alt bilgisinin dışına otomatik yerleştirildi. Bir şeyi değiştirmek isterseniz “✏ Düzenle” düğmesine basın.';
+const HINT_EDIT = 'Düzenleme modu: metne tıklayıp yazabilir, silebilirsiniz. Bir soruyu sonraki sayfaya almak için imleci sorunun başına koyup “Sayfa sonu ekle”ye basın. Bitince “Önizlemeyi güncelle”.';
+function hint(text, cls) { const h = $('hint'); h.textContent = text; h.className = 'hint' + (cls ? ' ' + cls : ''); }
+
+function viewEl() { return INLINE ? $('pages') : $('pdf'); }
+let pdfjsLib = null, zoom = 1;
+async function renderInline() {
+  if (!pdfjsLib) {
+    const lib = (window.pv && window.pv.libBase) || new URL('../node_modules/', location.href).href;
+    pdfjsLib = await import(lib + 'pdfjs-dist/build/pdf.min.mjs');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = lib + 'pdfjs-dist/build/pdf.worker.min.mjs';
+  }
+  const data = new Uint8Array(await window.pv.bytes(id));
+  const doc = await pdfjsLib.getDocument({ data }).promise;
+  const box = $('pages');
+  box.innerHTML = '';
+  const W = Math.max(200, box.clientWidth - 28) * zoom;
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  for (let n = 1; n <= doc.numPages; n++) {
+    const page = await doc.getPage(n);
+    const vp0 = page.getViewport({ scale: 1 });
+    const vp = page.getViewport({ scale: (W / vp0.width) * dpr });
+    const c = document.createElement('canvas');
+    c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    c.style.width = W + 'px';
+    box.appendChild(c);
+    await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+  }
+}
+function showPdf(url) {
+  if (INLINE) { renderInline().catch((e) => hint('PDF gösterilemedi: ' + e.message, 'err')); return; }
+  $('pdf').src = url + '#toolbar=1&navpanes=0&view=FitH';
+}
+
+const ED_CSS = (m, w) => `
+  html { background: #6b6f73 !important; }
+  body { width: ${w}cm !important; margin: 18px auto !important; padding: ${m.top}cm ${m.right}cm ${m.bottom}cm ${m.left}cm !important;
+         background: #fff !important; box-shadow: 0 2px 10px rgba(0,0,0,.4); min-height: 20cm; outline: none; }
+  .pv-break { display: block; height: 0; border-top: 2px dashed #d33; margin: 10px 0; position: relative; }
+  .pv-break::after { content: 'Sayfa sonu'; position: absolute; right: 0; top: -9px; font: 11px Arial; color: #d33; background: #fff; padding: 0 4px; }
+  .pv-space { background: repeating-linear-gradient(45deg, #fff, #fff 4px, #eef4ff 4px, #eef4ff 8px); }
+  *:focus { outline: none; }`;
+
+function enterEdit() {
+  const ed = $('ed');
+  ed.srcdoc = info.html;
+  ed.onload = () => {
+    const d = ed.contentDocument;
+    const st = d.createElement('style');
+    st.id = 'edstyle';
+    const m = info.margins || { top: 2, right: 2, bottom: 2, left: 2 };
+    st.textContent = ED_CSS(m, info.widthCm);
+    // body kutusu padding dahil sayfa genişliği olsun
+    st.textContent += `body { box-sizing: border-box !important; }`;
+    d.head.appendChild(st);
+    // telefonda sayfa ekrana sığacak şekilde küçültülür (yana kaydırma olmasın)
+    if (INLINE) d.documentElement.style.zoom = String(Math.min(1, (ed.clientWidth - 8) / ((info.widthCm / 2.54) * 96 + 40)));
+    d.body.contentEditable = 'true';
+    d.body.spellcheck = false;
+    d.body.focus();
+  };
+  viewEl().style.display = 'none';
+  ed.style.display = 'block';
+  document.body.classList.add('editing');
+  $('bEdit').classList.add('on');
+  hint(HINT_EDIT);
+}
+function leaveEdit() {
+  $('ed').style.display = 'none';
+  viewEl().style.display = 'block';
+  document.body.classList.remove('editing');
+  $('bEdit').classList.remove('on');
+}
+function serialize() {
+  const d = $('ed').contentDocument;
+  const clone = d.documentElement.cloneNode(true);
+  const st = clone.querySelector('#edstyle'); if (st) st.remove();
+  clone.style.zoom = ''; if (!clone.getAttribute('style')) clone.removeAttribute('style');
+  const b = clone.querySelector('body');
+  b.removeAttribute('contenteditable'); b.removeAttribute('spellcheck');
+  return '<!DOCTYPE html>\n' + clone.outerHTML;
+}
+function insertAtCaret(node) {
+  const d = $('ed').contentDocument;
+  const sel = d.getSelection();
+  if (!sel || !sel.rangeCount || !d.body.contains(sel.anchorNode)) { hint('Önce eklemek istediğiniz yere tıklayın.', 'err'); return; }
+  // imlecin bulunduğu blok öğenin (soru, paragraf) önüne ekle
+  let n = sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentNode : sel.anchorNode;
+  while (n && n.parentNode && n.parentNode !== d.body && !/^(DIV|P|LI|TR|SECTION|TABLE|H\d|OL|UL)$/.test(n.tagName)) n = n.parentNode;
+  // en yakın "soru" kutusu ya da gövdenin doğrudan çocuğu
+  let blk = n;
+  while (blk && blk.parentNode && blk.parentNode !== d.body) {
+    if (blk.classList && (['q','sq','scen','item','part','sk','skq'].some((c) => blk.classList.contains(c)) || blk.tagName === 'TR' || blk.tagName === 'LI')) break;
+    blk = blk.parentNode;
+  }
+  if (!blk || blk === d.body) { d.body.appendChild(node); }
+  else if (blk.tagName === 'TR') {
+    // tabloda satırdan önce sayfa sonu: satırın kendisine stil ver
+    if (node.classList.contains('pv-break')) { blk.style.breakBefore = 'page'; blk.style.pageBreakBefore = 'always'; blk.classList.add('pv-row-break'); blk.style.borderTop = ''; }
+    else blk.parentNode.insertBefore(Object.assign(d.createElement('tr'), { className: 'pv-space', innerHTML: `<td colspan="${blk.children.length}" style="height:1.2em"></td>` }), blk);
+  } else blk.parentNode.insertBefore(node, blk);
+  hint(HINT_EDIT);
+}
+
+$('bEdit').onclick = () => { if (document.body.classList.contains('editing')) { leaveEdit(); hint(HINT_VIEW); } else enterEdit(); };
+$('bCancel').onclick = () => { leaveEdit(); hint(HINT_VIEW); };
+$('bBreak').onclick = () => {
+  const d = $('ed').contentDocument;
+  const el = d.createElement('div'); el.className = 'pv-break'; el.setAttribute('style', 'break-before:page;page-break-before:always'); el.contentEditable = 'false';
+  insertAtCaret(el);
+};
+$('bSpace').onclick = () => {
+  const d = $('ed').contentDocument;
+  const el = d.createElement('div'); el.className = 'pv-space'; el.setAttribute('style', 'height:1.2em'); el.innerHTML = '&nbsp;';
+  insertAtCaret(el);
+};
+$('bDelBreak').onclick = () => {
+  const d = $('ed').contentDocument;
+  d.querySelectorAll('.pv-break, .pv-space').forEach((e) => e.remove());
+  d.querySelectorAll('.pv-row-break').forEach((e) => { e.style.breakBefore = ''; e.style.pageBreakBefore = ''; e.classList.remove('pv-row-break'); });
+};
+$('bApply').onclick = async () => {
+  const html = serialize();
+  hint('Önizleme yeniden hazırlanıyor…');
+  $('bApply').disabled = true;
+  try {
+    const url = await window.pv.rebuild(id, html);
+    if (!url) throw new Error('önizleme bulunamadı');
+    info.html = html;
+    leaveEdit();
+    showPdf(url);
+    hint('Düzenlemeler uygulandı. Sonucu kontrol edip “PDF olarak kaydet” ile kaydedebilirsiniz. (Düzenlemeler yalnızca bu çıktı için geçerlidir.)', 'ok');
+  } catch (e) { hint('Güncellenemedi: ' + e.message, 'err'); }
+  $('bApply').disabled = false;
+};
+$('bReset').onclick = async () => {
+  if (info.html === info.original) { hint('Henüz bir düzenleme yapılmadı.'); return; }
+  if (!confirm('Tüm düzenlemeler geri alınsın mı?')) return;
+  hint('Orijinal hâline döndürülüyor…');
+  const url = await window.pv.rebuild(id, info.original);
+  info.html = info.original;
+  leaveEdit();
+  showPdf(url);
+  hint(HINT_VIEW);
+};
+$('bSave').onclick = async () => {
+  if (document.body.classList.contains('editing')) {
+    if (!confirm('Düzenlemeler henüz önizlemeye uygulanmadı. Önce uygulansın mı?')) return;
+    await $('bApply').onclick();
+  }
+  const r = await window.pv.save(id);
+  if (r && r.ok) {
+    hint('Kaydedildi: ' + r.path, 'ok');
+    if (INLINE) {
+      const h = $('hint');
+      const b1 = document.createElement('button'); b1.textContent = 'Aç'; b1.onclick = () => window.pv.open(r.path);
+      const b2 = document.createElement('button'); b2.textContent = 'Paylaş'; b2.onclick = () => window.pv.share(r.path);
+      h.append(b1, b2);
+    }
+  }
+};
+$('bZoom').onclick = () => { zoom = zoom >= 2 ? 1 : zoom + 0.5; $('bZoom').textContent = '🔍 ' + Math.round(zoom * 100) + '%'; renderInline(); };
+$('bExt').onclick = async () => { const i = await window.pv.info(id); if (i) window.pv.open(decodeURIComponent(new URL(i.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))); };
+
+(async () => {
+  info = await window.pv.info(id);
+  if (!info) { hint('Önizleme bulunamadı.', 'err'); return; }
+  document.title = (info.fileName || 'Önizleme') + ' — Önizleme';
+  if (INLINE) { $('pdf').style.display = 'none'; $('pages').style.display = 'block'; $('bExt').style.display = 'none'; $('bZoom').style.display = ''; }
+  showPdf(info.url);
+})();
+</script>
+</body>
+</html>

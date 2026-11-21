@@ -1,0 +1,1 @@
+worker.min.js: tesseract.js 7.0.0; nesne olarak verilen dillerde Init'e veri yerine dil kodu geçecek biçimde düzeltildi (t.data -> t.code).
