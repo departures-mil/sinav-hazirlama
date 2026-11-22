@@ -2223,6 +2223,7 @@ function settingsForm() {
     <div class="margins">${['top', 'bottom', 'left', 'right'].map((k) => `<label>${t(k)}<input type="number" step="0.1" min="0" max="10" data-m="${k}" value="${s.margins[k]}"></label>`).join('')}</div>
     ${APPINFO.canUpdate ? updSettingsHtml() : ''}
     <div class="verline"><span>${esc(versionText())}</span>${APPINFO.canUpdate ? `<button class="btn primary" id="stUpdNow">🔄 ${t('updCheck')}</button>` : ''}${APPINFO.canPatch ? `<button class="btn" id="stUpd">${t('updLoad')}</button>` : ''}</div>`;
+  if (window.Kullanim) body.appendChild(window.Kullanim.kart());   // Ayarlar > Kullanım Limitleri
   body.appendChild(contactSection());
   if ($('#stUpd', body)) $('#stUpd', body).onclick = updateModal;
   if ($('#stUpdNow', body)) $('#stUpdNow', body).onclick = runUpdate;

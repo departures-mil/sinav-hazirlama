@@ -68,8 +68,8 @@
     vlvlNote: ['A1–C1 Oxford listelerinden, C2 Octanove C2 listesinden gelir; ikisinde de olmayanlar "Diğer"dedir.', 'A1–C1 come from the Oxford lists, C2 from the Octanove C2 list; words in neither are under "Other".', 'المستويات A1–C1 من قوائم أكسفورد، وC2 من قائمة Octanove؛ والكلمات خارجها ضمن "أخرى".'],
   });
 
-  const SRC = window.SINAV_UPDATE_SRC || { apiKey: 'AIzaSyCvgDwnnNNziLPrfBRns_vpBLtJjWvpXR0', projectId: 'sinav-hazirlama' };
-  const BANK_URL = `https://firestore.googleapis.com/v1/projects/${SRC.projectId}/databases/(default)/documents/updates/desktop/parts/bank~1?key=${encodeURIComponent(SRC.apiKey)}`;
+  // 1.9.2: çevrimiçi soru arşivi GitHub'dan gelir (yöneticinin Firebase kotası harcanmasın).
+  const BANK_URL = 'https://raw.githubusercontent.com/departures-mil/sinav-hazirlama/main/guncelleme/bank.json';
   const LS_CACHE = 'bank.online', LS_USED = 'bank.used', LS_MINE = 'bank.mine';
   const ls = {
     get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
@@ -93,12 +93,12 @@
     let online = false;
     try {
       if (navigator.onLine === false) throw new Error('offline');
-      const r = await fetchTimeout(BANK_URL, 7000);
+      const r = await fetchTimeout(BANK_URL + '?t=' + Math.floor(Date.now() / 3600000), 7000);
       online = r.ok || r.status === 404; // sunucuya ulaşıldı
       if (r.ok) {
         const j = await r.json();
         const d = j && j.fields && j.fields.d && j.fields.d.stringValue;
-        const b = d ? JSON.parse(d) : null;
+        const b = d ? JSON.parse(d) : (j && j.questions ? j : null);
         if (valid(b)) { cache = b; ls.set(LS_CACHE, b); }
       }
     } catch { /* çevrimdışı */ }

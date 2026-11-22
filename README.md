@@ -11,3 +11,8 @@ eşitlenir; **kayıtlar bu depoda bulunmaz**.
 ## Yeni sürüm
 1. Kodu değiştir, `uygulama/package.json` sürümünü artır (ör. 1.9.1).
 2. `OZEL_ANAHTAR=... node araclar/yayinla.js "notlar"` → `git add -A && git commit && git push`
+
+## 1.9.2
+- Ayarlar > Kullanım Limitleri (`renderer/kullanim.js` = duyurular/istemci/kullanim.js). Yöneticinin projesine giden iletişim mesajları sayılmaz (`haric`).
+- Çevrimiçi soru arşivi artık `guncelleme/bank.json` (GitHub) dosyasından okunur; Firebase'e gidilmez. Dosya yoksa programdaki yerleşik arşiv kullanılır.
+  Yeni arşiv yayınlamak için bank nesnesini (`{v, questions, scenarios}`) bu dosyaya yazıp gönderin.
