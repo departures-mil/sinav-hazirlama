@@ -2980,6 +2980,7 @@ async function init() {
   if (CL0.ready) cloudSoon();
   renderUpdBtn();
   // açılışta yeni sürüm her zaman denetlenir; varsa bildirim gelir
+  window.checkUpdate = checkUpdate;
   setTimeout(() => checkUpdate(false), 3000);
   setTimeout(() => cloudBackup(), 20000);
   setTimeout(() => contactFlush().catch(() => {}), 8000);
