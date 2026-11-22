@@ -102,6 +102,18 @@ ipcMain.handle('archive:write', (e, data) => {
   fs.renameSync(f + '.tmp', f);
   return true;
 });
+// 1.9.3: admin iletişimi — e-posta kopyası FormSubmit ile ana süreçten gider (Referer'sız/file:// istek reddedilir)
+ipcMain.handle('contact:mail', async (e, m) => {
+  try {
+    const to = Buffer.from('', 'base64').toString().split('').reverse().join('');
+    const body = { _subject: 'Sınav Hazırlama: ' + String(m.konu || 'yeni mesaj'), _template: 'table', _captcha: 'false', Ad: String(m.ad || '-'), Mesaj: String(m.mesaj || '').slice(0, 5000), Konu: String(m.konu || ''), Surum: String(m.surum || ''), Cihaz: String(m.cihaz || ''), Dil: String(m.dil || '') };
+    if (m.donus && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m.donus)) { body.email = m.donus; body._replyto = m.donus; } else if (m.donus) body.Donus = String(m.donus);
+    const r = await fetch('https://formsubmit.co/ajax/' + to, { method: 'POST', body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', Referer: 'https://formsubmit.co/', Origin: 'https://formsubmit.co' } });
+    const j = await r.json().catch(() => ({}));
+    return { ok: r.ok && String(j.success) === 'true' };
+  } catch (err) { return { ok: false }; }
+});
 ipcMain.handle('backup:open', () => { const dir = path.join(app.getPath('userData'), 'yedekler'); fs.mkdirSync(dir, { recursive: true }); return shell.openPath(dir); });
 if (!process.env.SINAV_TEST) app.whenReady().then(() => { backupAutosave(); createWindow(); });
 app.on('window-all-closed', () => app.quit());

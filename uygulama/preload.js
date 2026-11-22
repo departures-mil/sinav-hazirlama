@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('api', {
   exportTemplateRaw: inv('template:exportRaw'),
   importTemplateRaw: inv('template:importRaw'),
   appInfo: inv('app:info'),
+  contactMail: inv('contact:mail'),
   readDict: inv('dict:read'),
   libBase: LIB,
   inspectPatch: inv('patch:inspect'),

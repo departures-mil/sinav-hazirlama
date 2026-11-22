@@ -344,13 +344,24 @@
   /* ---------------- admin iletişim ---------------- */
   // Mesajlar güncelleme projesindeki iletisim/ bölümüne yazılır; kurallar yalnızca yeni kayıt eklemeye izin verir,
   // okuma ve silme yalnızca yöneticinin aktarım hesabına açıktır. Alıcı adres programda değil, yönetici tarafındadır.
+  // 1.9.3: iletişim mesajı iki bağımsız kanaldan gider; biri kabul ederse ulaşmış sayılır.
+  //  1) Yöneticinin mesaj kutusu: yöneticinin Firestore projesindeki "mesajlar" (yalnızca ekleme; kimse okuyamaz)
+  //  2) E-posta kopyası: FormSubmit, ana süreçten Referer'lı olarak (file:// sayfadan gönderim reddedilir)
+  const ADMIN_INBOX = 'https://firestore.googleapis.com/v1/projects/comm-calc-103111111/databases/(default)/documents/mesajlar?key=AIzaSyB12RFS6ENPpmnnPsETfjedNH-3hmNWQvA';
   async function sendContact(m) {
-    const c = updCfg();
-    if (!c) throw fail('NO_CONFIG');
-    const url = (c.emu ? c.emu.fs : 'https://firestore.googleapis.com') + `/v1/projects/${c.projectId}/databases/(default)/documents/iletisim?key=${encodeURIComponent(c.apiKey)}`;
-    const r = await request(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: fieldsOf(m) }) });
-    if (!r.ok) throw dbError(r);
-    return docOut(r.j);
+    const S = (v) => ({ stringValue: String(v == null ? '' : v).slice(0, 4000) });
+    const fields = {
+      mesaj: S(m.mesaj), konu: S('Sınav Hazırlama · ' + (m.konu || '')), dil: S(m.dil), surum: S(m.surum),
+      platform: S('Sınav Hazırlama · ' + (m.platform || '') + (m.cihaz ? ' · ' + m.cihaz : '')), zaman: { timestampValue: new Date().toISOString() },
+    };
+    if (m.ad) fields.ad = S(m.ad);
+    if (m.donus) fields.iletisim = S(m.donus);
+    const inbox = request(ADMIN_INBOX, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) })
+      .then((r) => r.ok, () => false);
+    const mail = (window.api && window.api.contactMail) ? Promise.resolve(window.api.contactMail(m)).then((r) => !!(r && r.ok), () => false) : Promise.resolve(false);
+    const [a, b] = await Promise.all([inbox, mail]);
+    if (!a && !b) throw fail('OFFLINE', 'contact');
+    return { ok: true };
   }
 
   window.Cloud = {

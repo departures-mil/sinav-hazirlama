@@ -1,9 +1,9 @@
 {
- "version": "1.9.2",
+ "version": "1.9.3",
  "minBase": "1.9.0",
- "notes": "Sınav Hazırlama 1.9.2: Ayarlar'a «Kullanım Limitleri» eklendi (kendi Firebase hesabınızın günlük okuma/yazma/silme kullanımı). Çevrimiçi soru arşivi artık GitHub'dan gelir. Kayıtlarınız olduğu gibi kalır.",
- "file": "SinavHazirlama-1.9.2.sinavyama",
- "size": 13690433,
- "sha": "76e75aa8af95b348ba0b8175ef5f91c722b5c21458e2740e82c5fba61fc3cc3f",
- "publishedAt": "2026-11-22T06:28:01.733Z"
+ "notes": "Sınav Hazırlama 1.9.3: «Admin ile iletişime geç» düzeltildi — mesajlarınız artık yöneticiye güvenilir biçimde ulaşıyor. Kayıtlarınız olduğu gibi kalır.",
+ "file": "SinavHazirlama-1.9.3.sinavyama",
+ "size": 13691472,
+ "sha": "31e57e17e2dd2cc1be765ff128970784c2750c1cb968844c06181f7bd34191f9",
+ "publishedAt": "2026-11-22T09:41:24.066Z"
 }
