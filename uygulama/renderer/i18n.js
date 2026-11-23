@@ -479,6 +479,8 @@ window.I18N = {
   findPh: ['Bul... (Enter: sonraki, Shift+Enter: önceki)', 'Find... (Enter: next, Shift+Enter: previous)', 'بحث... (Enter: التالي، Shift+Enter: السابق)'],
   findTip: ['Bul (Ctrl+F)', 'Find (Ctrl+F)', 'بحث (Ctrl+F)'],
   findNone: ['Bulunamadı', 'No matches', 'لا نتائج'],
+  bkFind: ['Listede bul', 'Find in list', 'بحث في القائمة'],
+  bkFindTip: ['Ctrl+F — görünen listede ara, Enter: sonraki, Shift+Enter: önceki', 'Ctrl+F — search the visible list, Enter: next, Shift+Enter: previous', 'Ctrl+F — بحث في القائمة الظاهرة، Enter: التالي، Shift+Enter: السابق'],
   findPrev: ['Önceki', 'Previous', 'السابق'],
   findNext: ['Sonraki', 'Next', 'التالي'],
   moveTo: ['Numaraya taşı', 'Move to number', 'نقل إلى رقم'],
