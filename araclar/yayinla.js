@@ -28,6 +28,8 @@ function list(dir, rel = '') {
 }
 
 (async () => {
+  // 1.9.5: çevrimiçi arşiv (guncelleme/bank.json) her yayında yerleşik arşivden yeniden üretilir
+  require('./arsiv.js')();
   const zip = new JSZip();
   const files = {};
   for (const r of list(APP)) {

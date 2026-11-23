@@ -1668,7 +1668,8 @@ async function bankModal(kind, startTab = 'auto', preset = '') {
   let st = null;
   const status = () => {
     if (!st) return;
-    $('#bkStatus', body).textContent = t(st.source === 'online' ? 'bkOnline' : st.source === 'cache' ? 'bkCache' : 'bkBuiltin', { v: st.v });
+    // 1.9.5: internete ulaşıldıysa yerleşik arşiv de "çevrimiçi" sayılır (çevrimiçi arşiv yoksa ya da daha eskiyse)
+    $('#bkStatus', body).textContent = t(st.source === 'online' ? 'bkOnline' : st.source === 'cache' ? 'bkCache' : st.online ? 'bkBuiltinOn' : 'bkBuiltin', { v: st.v });
   };
   const go = async () => {
     const lvl = +lvlSel.value;
