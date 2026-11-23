@@ -1244,7 +1244,7 @@ function modal({ title, body, buttons = [], wide, onClose }) {
   bd.innerHTML = `<div class="modal ${wide ? 'wide' : ''}"><header><h2></h2><button class="x">✕</button></header><div class="body"></div><footer></footer></div>`;
   $('h2', bd).textContent = title;
   if (typeof body === 'string') $('.body', bd).innerHTML = body; else $('.body', bd).appendChild(body);
-  const close = () => { bd.remove(); if (onClose) onClose(); };
+  const close = () => { if (FIND.bar && FIND.root && bd.contains(FIND.root)) findClose(false); bd.remove(); if (onClose) onClose(); };
   $('.x', bd).onclick = close;
   buttons.forEach((b) => {
     const el = document.createElement('button');
@@ -1289,11 +1289,68 @@ const fnorm = (x) => String(x || '').replace(/[İIı]/g, 'i').toLowerCase();
 function findFields() {
   return [...document.querySelectorAll('#editor textarea, #editor input[type="text"], #editor input:not([type])')];
 }
+// 1.9.8: açık bir pencere (örn. Otomatik soru getir / Arşiv) varsa arama o pencerenin görünen yazısında yapılır
+function findRoot() {
+  const m = document.querySelector('#modalRoot .backdrop:last-child .modal .body');
+  return m || null;
+}
+function findUnmark(root) {
+  (root || document).querySelectorAll('mark.fmark').forEach((mk) => {
+    const par = mk.parentNode; if (!par) return;
+    par.replaceChild(document.createTextNode(mk.textContent), mk); par.normalize();
+  });
+}
+function findCollectDom(root, q) {
+  const hits = [];
+  const vis = new Map();
+  const visible = (el) => {
+    if (vis.has(el)) return vis.get(el);
+    let ok = true;
+    for (let e = el; e && e !== root; e = e.parentElement) {
+      const st = e.style;
+      if (st && st.display === 'none') { ok = false; break; }
+      if (vis.has(e)) { ok = vis.get(e); break; }
+    }
+    vis.set(el, ok); return ok;
+  };
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => {
+      const p = n.parentElement;
+      if (!p || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      if (/^(SCRIPT|STYLE|TEXTAREA|INPUT|SELECT|OPTION|BUTTON|MARK)$/.test(p.tagName)) return NodeFilter.FILTER_REJECT;
+      if (!visible(p)) return NodeFilter.FILTER_REJECT;
+      return fnorm(n.nodeValue).includes(q) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    },
+  });
+  const nodes = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n);
+  for (const n of nodes) {
+    const text = n.nodeValue, low = fnorm(text);
+    if (low.length !== text.length) { // İ/ı dönüşümü uzunluğu bozmaz ama güvenli olsun
+      hits.push({ el: n.parentElement, pos: 0, node: n }); continue;
+    }
+    const frag = document.createDocumentFragment();
+    let last = 0, p = low.indexOf(q);
+    while (p >= 0) {
+      if (p > last) frag.appendChild(document.createTextNode(text.slice(last, p)));
+      const mk = document.createElement('mark'); mk.className = 'fmark findhit'; mk.textContent = text.slice(p, p + q.length);
+      frag.appendChild(mk); hits.push({ el: mk, pos: p, key: n.parentElement });
+      last = p + q.length; p = low.indexOf(q, last);
+    }
+    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    n.parentNode.replaceChild(frag, n);
+  }
+  return hits;
+}
 function findCollect() {
   const q = fnorm(FIND.q);
   const hits = [];
   document.querySelectorAll('.findhit, .findcur').forEach((el) => el.classList.remove('findhit', 'findcur'));
+  findUnmark();
   if (!q) return hits;
+  const root = findRoot();
+  if (root) { FIND.root = root; return findCollectDom(root, q); }
+  FIND.root = null;
   for (const el of findFields()) {
     const v = fnorm(el.value);
     let p = v.indexOf(q), any = false;
@@ -1314,23 +1371,31 @@ function findShow(step) {
   FIND.bar.classList.toggle('none', !!FIND.q && !n);
   if (!n) { FIND.i = -1; cnt.textContent = FIND.q ? t('findNone') : ''; return; }
   // aynı yerde kal, sonra adım at
-  let i = prev ? FIND.hits.findIndex((h) => h.el === prev.el && h.pos === prev.pos) : -1;
+  let i = prev ? FIND.hits.findIndex((h) => (h.key ? h.key === prev.key : h.el === prev.el) && h.pos === prev.pos) : -1;
   if (i < 0) i = step < 0 ? n - 1 : 0; else i = (i + step + n) % n;
   if (step === 0 && FIND.i < 0) i = 0;
   FIND.i = i;
   const h = FIND.hits[i];
   h.el.classList.add('findcur');
-  const tab = findPaneOf(h.el);
-  if (tab && !MOBILE && tab !== (prefs.tab || 'test')) setTab(tab);
+  if (!FIND.root) {
+    const tab = findPaneOf(h.el);
+    if (tab && !MOBILE && tab !== (prefs.tab || 'test')) setTab(tab);
+  }
   h.el.scrollIntoView({ block: 'center' });
   cnt.textContent = `${i + 1} / ${n}`;
+}
+// pencere listesi yeniden çizildiğinde (süzgeç, sekme) vurguları tazele
+function findRefresh() {
+  if (!FIND.bar || !FIND.q) return;
+  clearTimeout(FIND.rt); FIND.rt = setTimeout(() => { if (FIND.bar) findShow(0); }, 30);
 }
 function findClose(focusHit) {
   if (!FIND.bar) return;
   const h = FIND.hits[FIND.i];
   FIND.bar.remove(); FIND.bar = null;
   document.querySelectorAll('.findhit, .findcur').forEach((el) => el.classList.remove('findhit', 'findcur'));
-  if (focusHit && h && document.body.contains(h.el)) {
+  findUnmark(); FIND.root = null;
+  if (focusHit && h && !h.key && document.body.contains(h.el)) {
     h.el.focus();
     try { h.el.setSelectionRange(h.pos, h.pos + FIND.q.length); } catch { /* yok */ }
   }
@@ -1342,7 +1407,12 @@ function findOpen() {
   bar.innerHTML = `<span class="ic">🔍</span><input type="text" spellcheck="false"><span class="findcnt"></span>
     <button data-f="prev" title="${esc(t('findPrev'))}">▲</button><button data-f="next" title="${esc(t('findNext'))}">▼</button><button data-f="x" title="${esc(t('close'))}">✕</button>`;
   document.body.appendChild(bar);
-  if (!MOBILE) { const tb = document.querySelector('.topbar'); if (tb) bar.style.top = (Math.round(tb.getBoundingClientRect().bottom) + 8) + 'px'; }
+  if (!MOBILE) {
+    const mr = findRoot();
+    const tb = mr ? mr.closest('.modal').querySelector('header') : document.querySelector('.topbar');
+    if (tb) bar.style.top = (Math.round(tb.getBoundingClientRect().bottom) + (mr ? 2 : 8)) + 'px';
+    if (mr) bar.style.right = Math.max(18, Math.round(window.innerWidth - mr.closest('.modal').getBoundingClientRect().right) + 10) + 'px';
+  }
   FIND.bar = bar; FIND.i = -1; FIND.hits = [];
   const inp = $('input', bar);
   inp.placeholder = t('findPh');
@@ -1597,6 +1667,7 @@ async function bankModal(kind, startTab = 'auto', preset = '') {
         <label>${esc(t('bkLevel'))} <select class="in" id="baLvl">${lvlOpts(true)}</select></label>
         <label>${esc(t('bkTopic'))} <select class="in" id="baTop"><option value="">${esc(t('bkTall'))}</option>${['uav', 'eng', 'vocab', 'oxf', 'mine'].filter((k) => isQ || (k !== 'vocab' && k !== 'oxf')).map((k) => `<option value="${k}">${esc(bkTopicName(k, kind))}</option>`).join('')}</select></label>
         <input type="text" id="baQ" placeholder="${esc(t('bkSearch'))}" style="width:200px">
+        <button class="btn" id="baFind" title="${esc(t('bkFindTip'))}">🔍 ${esc(t('bkFind'))}</button>
       </div>
       <div class="row bkarch">
         <button class="btn" id="baSave">${esc(t('bkSaveExam'))}</button>
@@ -1631,7 +1702,7 @@ async function bankModal(kind, startTab = 'auto', preset = '') {
     tab = x;
     body.querySelectorAll('.bktabs button').forEach((b) => b.classList.toggle('on', b.dataset.t === x));
     body.querySelectorAll('.bkpane').forEach((p) => { p.style.display = p.dataset.p === x ? '' : 'none'; });
-    if (x === 'arch') renderArch();
+    if (x === 'arch') renderArch(); else findRefresh();
     updAdd();
   };
   body.querySelectorAll('.bktabs button').forEach((b) => { b.onclick = () => setTab(b.dataset.t); });
@@ -1725,7 +1796,7 @@ async function bankModal(kind, startTab = 'auto', preset = '') {
       lists.auto = out; checked.auto = new Set(out);
       info.textContent = notes.join(' · ');
       res.innerHTML = out.length ? out.map((it, i) => itemHtml(it, i, 'auto')).join('') : `<div class="empty">${esc(t('bkNone'))}</div>`;
-      bindList(res, 'auto');
+      bindList(res, 'auto'); findRefresh();
       $('#bkAgain', body).style.display = out.length ? '' : 'none';
     } catch (e) { info.textContent = t('error') + ': ' + e.message; }
     $('#bkGo', body).disabled = false;
@@ -1753,10 +1824,11 @@ async function bankModal(kind, startTab = 'auto', preset = '') {
     $('#bkAInfo', body).textContent = t('bkShown', { n: all.length }) + (all.length > shown.length ? ' ' + t('bkMore', { n: all.length - shown.length }) : '');
     const box = $('#bkAList', body);
     box.innerHTML = shown.length ? shown.map((it, i) => itemHtml(it, i, 'arch', { used: used.has(it.id), inExam: sigs.has(B.sig(it.text)) })).join('') : `<div class="empty">${esc(t('bkNone'))}</div>`;
-    bindList(box, 'arch');
+    bindList(box, 'arch'); findRefresh();
     updAdd();
   };
   ['#baSrc', '#baLvl', '#baTop'].forEach((s) => { $(s, body).onchange = renderArch; });
+  $('#baFind', body).onclick = () => findOpen();
   $('#baQ', body).oninput = () => { clearTimeout(renderArch.tm); renderArch.tm = setTimeout(renderArch, 250); };
   $('#baSave', body).onclick = async () => {
     const lvl = +$('#baSaveLvl', body).value;
@@ -1789,7 +1861,7 @@ async function bankModal(kind, startTab = 'auto', preset = '') {
         lists.ai = qs; checked.ai = new Set(qs);
         info.textContent = a ? t('bkAutoSaved', { n: a }) : '';
         res.innerHTML = qs.map((it, i) => itemHtml(it, i, 'ai')).join('');
-        bindList(res, 'ai');
+        bindList(res, 'ai'); findRefresh();
       } catch (e) { info.textContent = t('aiGenErr', { e: e.message }); }
       $('#aiGo', body).disabled = false; updAdd();
     };
