@@ -121,6 +121,7 @@ app.on('window-all-closed', () => app.quit());
 /* ---------------- window ---------------- */
 ipcMain.handle('win:toggleFullscreen', () => { mainWin.setFullScreen(!mainWin.isFullScreen()); return mainWin.isFullScreen(); });
 ipcMain.handle('win:quit', () => app.quit());
+ipcMain.handle('win:minimize', () => { mainWin.minimize(); });
 
 /* ---------------- dialogs & files ---------------- */
 ipcMain.handle('dlg:open', async (e, opts) => {

@@ -2692,7 +2692,7 @@ function renderUpdBtn() {
   if (!b) return;
   b.style.display = APPINFO.canUpdate ? '' : 'none';
   b.classList.toggle('has', !!updHead);
-  $('.lbl', b).textContent = updHead ? t('updNow', { v: updHead.version }) : t('updCheck');
+  $('.lbl', b).textContent = updHead ? updHead.version : '';
   b.title = updHead ? t('updNowTip', { v: updHead.version }) : t('updCheckTip');
 }
 async function checkUpdate(manual) {
@@ -3171,6 +3171,20 @@ function wire() {
   $('#btnUndo').onclick = undo;
   $('#btnFind').onclick = findOpen;
   $('#btnFull').onclick = () => api.toggleFullscreen();
+  if ($('#btnMin')) $('#btnMin').onclick = () => { if (api.minimize) api.minimize(); };
+  // Kaydet ▾ açılır menüsü (Farklı Kaydet)
+  const sp = $('#btnSaveMore') && $('#btnSaveMore').closest('.split');
+  if (sp) {
+    $('#btnSaveMore').onclick = (e) => { e.stopPropagation(); sp.classList.toggle('open'); };
+    document.addEventListener('click', (e) => { if (!sp.contains(e.target)) sp.classList.remove('open'); });
+    $('#saveMenu', sp).addEventListener('click', () => sp.classList.remove('open'));
+  }
+  if ($('#btnSync')) $('#btnSync').onclick = async () => {
+    if (!CL0.ready || !CL0.user) return cloudModal();
+    const b = $('#btnSync'); b.disabled = true; b.classList.add('spin');
+    try { await cloudPull(); if (syncRec(exam.id).dirty) await cloudPush(true); toast(t('cloudSynced'), 'ok'); } catch (e) { toast(t('error') + ': ' + e.message, 'warn'); }
+    b.disabled = false; b.classList.remove('spin');
+  };
   $('#btnQuit').onclick = async () => { await api.writeAutosave({ exam, filePath, dirty }); api.quit(); };
   $('#btnAddQ').onclick = () => { snap(); const q = newQuestion(); exam.questions.push(q); renderList(); changed(); scrollToQ(q.id, true); };
   document.querySelectorAll('.tabs button').forEach((b) => { b.onclick = () => setTab(b.dataset.tab); });
