@@ -1,9 +1,9 @@
 {
- "version": "1.9.5",
+ "version": "1.9.6",
  "minBase": "1.9.0",
- "notes": "Sınav Hazırlama 1.9.5: Soru arşivi artık internetten de güncelleniyor (6.258 soru). İnternet varken '🔴 Çevrimdışı' yazma hatası düzeltildi. Kayıtlarınız olduğu gibi kalır.",
- "file": "SinavHazirlama-1.9.5.sinavyama",
- "size": 13770723,
- "sha": "6c4004cbe65df7d2d16e9a0e3784a89f72d08af07abe8bc9c7d466ffe13dcac3",
- "publishedAt": "2026-11-23T07:57:15.119Z"
+ "notes": "Sınav Hazırlama 1.9.6: Yapay zeka bağlantısı düzeltildi — yeni Gemini 3 modelleri (3.8 Flash) varsayılan; kapatılan model ya da yoğunluk hatasında program kendiliğinden başka modele geçer. 'Bağlantıyı dene' artık hangi modelin çalıştığını gösterir. Kayıtlarınız olduğu gibi kalır.",
+ "file": "SinavHazirlama-1.9.6.sinavyama",
+ "size": 13771823,
+ "sha": "dcd4ade16f161a8c1b61a1844fe5a95d900dbb16441c67612175b308cb8c43d2",
+ "publishedAt": "2026-11-23T08:21:30.939Z"
 }

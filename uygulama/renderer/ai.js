@@ -38,24 +38,62 @@
 
   const LS = 'ai.cfg';
   const PROV = {
-    gemini: { name: 'Google Gemini', models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'], url: 'https://aistudio.google.com/apikey' },
+    gemini: { name: 'Google Gemini', models: ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'], url: 'https://aistudio.google.com/apikey' },
     openai: { name: 'OpenAI', models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini'], url: 'https://platform.openai.com/api-keys' },
     anthropic: { name: 'Anthropic Claude', models: ['claude-3-5-haiku-latest', 'claude-sonnet-4-5'], url: 'https://console.anthropic.com/' },
-    openrouter: { name: 'OpenRouter', models: ['google/gemini-2.5-flash', 'openai/gpt-4o-mini', 'meta-llama/llama-3.3-70b-instruct'], url: 'https://openrouter.ai/keys' },
+    openrouter: { name: 'OpenRouter', models: ['google/gemini-3.8-flash', 'openai/gpt-4o-mini', 'meta-llama/llama-3.3-70b-instruct'], url: 'https://openrouter.ai/keys' },
     groq: { name: 'Groq', models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'], url: 'https://console.groq.com/keys' },
   };
-  const get = () => { try { return JSON.parse(localStorage.getItem(LS) || '{}'); } catch { return {}; } };
+  // 1.9.6: Google'ın kapattığı eski modeller (2.x) yeni kullanıcılara açılmıyor; kayıtlı eski model varsa güncel varsayılana geçir
+  const LEGACY = /^gemini-(1\.|2\.)/;
+  const get = () => {
+    let c = {}; try { c = JSON.parse(localStorage.getItem(LS) || '{}'); } catch { c = {}; }
+    if ((c.provider || 'gemini') === 'gemini' && c.model && LEGACY.test(c.model)) { c.model = PROV.gemini.models[0]; try { localStorage.setItem(LS, JSON.stringify(c)); } catch { /* yok */ } }
+    return c;
+  };
   const set = (c) => localStorage.setItem(LS, JSON.stringify(c));
   const ready = () => { const c = get(); return !!(c.key && PROV[c.provider || 'gemini']); };
   const uiLang = () => (window.prefs && window.prefs.uiLang) || 'tr';
   const LN = { tr: 'Turkish', en: 'English', ar: 'Arabic' };
 
   /* ---------- sağlayıcı çağrıları ---------- */
+  // 1.9.6: yoğunluk/aşırı yük (503/429) hatasında bekleyip tekrar dener, sonra sıradaki modele geçer;
+  // "model kapatıldı, X kullanın" hatasında önerilen modele geçer ve kalıcı olarak kaydeder.
+  const BUSY = /high demand|overloaded|try again later|resource.?exhausted|unavailable|HTTP 5\d\d|HTTP 429/i;
+  const GONE = /no longer available|not found|is not supported|deprecated|HTTP 404/i;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   async function chat(messages, opts = {}) {
     const c = get();
     if (!c.key) throw new Error(window.t('aiNoKey'));
     const p = c.provider || 'gemini';
-    const model = c.model || PROV[p].models[0];
+    const first = c.model || PROV[p].models[0];
+    const chain = [first, ...PROV[p].models.filter((m) => m !== first)];
+    let lastErr = null, triedGone = false;
+    for (let i = 0; i < chain.length; i++) {
+      const model = chain[i];
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const out = await chatOnce(c, p, model, messages, opts);
+          if (model !== first && triedGone) { c.model = model; set(c); }   // eski model kapalı: yeni modeli kalıcı yap
+          return out;
+        } catch (e) {
+          lastErr = e;
+          const msg = String(e && e.message || e);
+          if (e && e.name === 'AbortError') throw e;
+          if (GONE.test(msg)) {
+            triedGone = true;
+            const m = msg.match(/models\/([A-Za-z0-9.\-_]+)/);           // Google'ın önerdiği model
+            if (m && m[1] && !chain.includes(m[1])) chain.splice(i + 1, 0, m[1]);
+            break;                                                        // bu modeli bırak, sıradakine geç
+          }
+          if (BUSY.test(msg)) { if (attempt === 0) { await sleep(2500); continue; } break; }
+          throw e;                                                        // anahtar hatası vb.: hemen bildir
+        }
+      }
+    }
+    throw lastErr || new Error('AI');
+  }
+  async function chatOnce(c, p, model, messages, opts) {
     const sys = opts.system || '';
     const ac = new AbortController(); const tm = setTimeout(() => ac.abort(), opts.timeout || 90000);
     const o = { signal: ac.signal, method: 'POST', headers: { 'Content-Type': 'application/json' } };
@@ -65,7 +103,10 @@
       body = {
         systemInstruction: sys ? { parts: [{ text: sys }] } : undefined,
         contents: messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
-        generationConfig: { temperature: opts.temperature ?? 0.4, maxOutputTokens: opts.maxTokens || 4096, responseMimeType: opts.json ? 'application/json' : 'text/plain' },
+        generationConfig: Object.assign(
+          { maxOutputTokens: Math.max(opts.maxTokens || 4096, /^gemini-[3-9]/.test(model) ? 2048 : 1), responseMimeType: opts.json ? 'application/json' : 'text/plain' },
+          // Gemini 3+: düşünme jetonları çıktı sınırını yemesin (yoksa boş yanıt döner); sıcaklık 3+'ta yok sayılıyor
+          /^gemini-[3-9]/.test(model) ? { thinkingConfig: { thinkingLevel: 'low' } } : { temperature: opts.temperature ?? 0.4 }),
       };
       parse = (j) => ((j.candidates || [])[0] || {}).content?.parts?.map((x) => x.text).join('') || '';
     } else if (p === 'anthropic') {
@@ -250,7 +291,7 @@ Each question: exactly ${optionCount || 5} options, exactly one correct (index i
     ['#aiModel', '#aiKey', '#aiUseTr'].forEach((s) => { box.querySelector(s).onchange = save; box.querySelector(s).oninput = save; });
     box.querySelector('#aiTest').onclick = async () => {
       save(); const info = box.querySelector('#aiInfo'); info.textContent = t('aiThinking');
-      try { await chat([{ role: 'user', content: 'Reply with OK.' }], { maxTokens: 10, timeout: 30000 }); info.textContent = t('aiOk'); } catch (e) { info.textContent = t('aiFail', { e: e.message }); }
+      try { await chat([{ role: 'user', content: 'Reply with OK.' }], { maxTokens: 256, timeout: 60000 }); const m = get().model; if (m) box.querySelector('#aiModel').value = m; info.textContent = t('aiOk') + (m ? ' (' + m + ')' : ''); } catch (e) { info.textContent = t('aiFail', { e: e.message }); }
     };
     return box;
   }
