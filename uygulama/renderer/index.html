@@ -9,28 +9,38 @@
 <body>
 <header class="topbar">
   <div class="brand"><span class="logo">✎</span><div><div class="appname"><span data-i18n="appTitle"></span> <span class="ver" id="appVer"></span></div><div class="filename" id="fileName"></div></div></div>
-  <div class="group">
-    <button id="btnNew" class="tb"><span class="ic">＋</span><span data-i18n="new"></span></button>
-    <button id="btnOpen" class="tb"><span class="ic">📂</span><span data-i18n="open"></span></button>
-    <button id="btnSave" class="tb"><span class="ic">💾</span><span data-i18n="save"></span></button>
-    <button id="btnSaveAs" class="tb"><span data-i18n="saveAs"></span></button>
+  <div class="group g1">
+    <button id="btnNew" class="tb" data-i18n-title="new"><span class="ic">＋</span><span class="lbl" data-i18n="new"></span></button>
+    <button id="btnOpen" class="tb" data-i18n-title="open"><span class="ic">📂</span><span class="lbl" data-i18n="open"></span></button>
+    <span class="split">
+      <button id="btnSave" class="tb" data-i18n-title="save"><span class="ic">💾</span><span class="lbl" data-i18n="save"></span></button>
+      <button id="btnSaveMore" class="tb caret" data-i18n-title="saveMore">▾</button>
+      <div class="menu" id="saveMenu"><button id="btnSaveAs" data-i18n="saveAs"></button></div>
+    </span>
   </div>
-  <div class="group">
-    <button id="btnImport" class="tb"><span class="ic">📥</span><span data-i18n="import"></span></button>
-    <button id="btnTemplate" class="tb"><span class="ic">🖼</span><span data-i18n="template"></span></button>
-    <button id="btnTranslateAll" class="tb"><span class="ic">🌐</span><span data-i18n="translateAll"></span></button>
-    <button id="btnOutput" class="tb primary"><span class="ic">🖨</span><span data-i18n="output"></span></button>
-    <button id="btnAdvisor" class="tb"><span class="ic">🤖</span><span data-i18n="advisor"></span></button>
-    <button id="btnSettings" class="tb"><span class="ic">⚙</span><span data-i18n="settings"></span></button>
-    <button id="btnCloud" class="tb cloudbtn" data-st="off"><span class="ic">☁</span><span data-i18n="cloud"></span><i class="dot"></i></button>
-    <button id="btnUpdate" class="tb updbtn" style="display:none"><span class="ic">🔄</span><span class="lbl"></span><i class="dot"></i></button>
+  <div class="group g1">
+    <button id="btnImport" class="tb" data-i18n-title="import"><span class="ic">📥</span><span class="lbl" data-i18n="importShort"></span></button>
+    <button id="btnTemplate" class="tb" data-i18n-title="template"><span class="ic">🖼</span><span class="lbl" data-i18n="templateShort"></span></button>
+    <button id="btnTranslateAll" class="tb" data-i18n-title="translateAll"><span class="ic">🌐</span><span class="lbl" data-i18n="translateShort"></span></button>
   </div>
+  <button id="btnOutput" class="tb primary" data-i18n-title="output"><span class="ic">🖨</span><span class="lbl" data-i18n="output"></span></button>
+  <div class="group g1">
+    <button id="btnAdvisor" class="tb" data-i18n-title="advisor"><span class="ic">🤖</span><span class="lbl" data-i18n="advisor"></span></button>
+    <button id="btnSettings" class="tb" data-i18n-title="settings"><span class="ic">⚙</span><span class="lbl" data-i18n="settings"></span></button>
+  </div>
+  <button id="btnCloud" class="tb cloudbtn" data-st="off" data-i18n-title="cloud"><span class="ic">☁</span><span class="lbl" data-i18n="cloud"></span><i class="dot"></i></button>
   <div class="group end">
-    <label class="sel"><span data-i18n="uiLang"></span><select id="uiLang"></select></label>
-    <label class="sel"><span data-i18n="contentLang"></span><select id="contentLang"></select></label>
+    <label class="sel" data-i18n-title="uiLang"><span data-i18n="uiLangShort"></span><select id="uiLang"></select></label>
+    <label class="sel" data-i18n-title="contentLang"><span data-i18n="contentLangShort"></span><select id="contentLang"></select></label>
+    <span class="vsep"></span>
     <button id="btnFind" class="tb icon" data-i18n-title="findTip">🔍</button>
     <button id="btnUndo" class="tb icon" data-i18n-title="undo">↶</button>
-    <button id="btnFull" class="tb icon" data-i18n-title="fullscreen">⛶</button>
+    <span class="vsep"></span>
+    <button id="btnUpdate" class="tb icon updbtn" style="display:none"><span class="ic">⬇</span><span class="lbl"></span><i class="dot"></i></button>
+    <button id="btnSync" class="tb icon" data-i18n-title="syncNow">🔃</button>
+    <span class="vsep"></span>
+    <button id="btnMin" class="tb icon" data-i18n-title="minimize">—</button>
+    <button id="btnFull" class="tb icon" data-i18n-title="halfScreen">❐</button>
     <button id="btnQuit" class="tb icon danger" data-i18n-title="quit">✕</button>
   </div>
 </header>

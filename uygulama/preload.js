@@ -8,6 +8,7 @@ const inv = (ch) => (...a) => ipcRenderer.invoke(ch, ...a);
 
 contextBridge.exposeInMainWorld('api', {
   toggleFullscreen: inv('win:toggleFullscreen'),
+  minimize: inv('win:minimize'),
   quit: inv('win:quit'),
   openDialog: inv('dlg:open'),
   saveDialog: inv('dlg:save'),

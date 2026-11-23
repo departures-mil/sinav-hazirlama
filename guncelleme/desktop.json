@@ -1,9 +1,9 @@
 {
- "version": "1.9.9",
+ "version": "1.9.10",
  "minBase": "1.9.0",
- "notes": "Ayarlar > Soru seviye etiketleri: etiket adlarını üç dilde değiştirme, ekleme, silme, sıralama, varsayılana dönme",
- "file": "SinavHazirlama-1.9.9.sinavyama",
- "size": 13776368,
- "sha": "c609865ba43afb1c86cea23c5d47d73d27555f2aa6142edded3992405ef826dd",
- "publishedAt": "2026-11-23T08:57:53.600Z"
+ "notes": "Üst çubuk tek satır: gruplanmış düğmeler, Kaydet ▾ menüsü (Farklı Kaydet), kısa dil kutuları, sağda Bul/Geri al/Güncelle/Eşitle/Küçült/Pencere/Kapat; dar pencerede yalnız simgeler",
+ "file": "SinavHazirlama-1.9.10.sinavyama",
+ "size": 13777704,
+ "sha": "a7c063ded15f96c3c175c18afcc8e4560fb40e48be1ba9eab8eb0337f36d046f",
+ "publishedAt": "2026-11-23T09:05:00.863Z"
 }
