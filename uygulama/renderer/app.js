@@ -45,6 +45,7 @@ function newQuestion() {
   return { id: uid(), text: ML(), options: [0, 1, 2, 3, 4].map(() => ML()), correct: -1 };
 }
 function normalizeExam(e) {
+  if (e) tagLearn(e);
   const x = newExam();
   if (/^[A-Za-z0-9]{6,40}$/.test(e.id || '')) x.id = e.id;
   x.school = ML(e.school); x.title = ML(e.title); x.instructions = ML(e.instructions);
@@ -54,7 +55,7 @@ function normalizeExam(e) {
   x.questions = (e.questions || []).map((q) => {
     const opts = (q.options || []).slice(0, 5).map(ML);
     while (opts.length < 5) opts.push(ML());
-    return { id: q.id || uid(), text: ML(q.text), options: opts, correct: Number.isInteger(q.correct) ? q.correct : -1, ghost: !!q.ghost, tag: QTAGS.includes(q.tag) ? q.tag : '' };
+    return { id: q.id || uid(), text: ML(q.text), options: opts, correct: Number.isInteger(q.correct) ? q.correct : -1, ghost: !!q.ghost, tag: typeof q.tag === 'string' ? q.tag.slice(0, 40) : '' };
   });
   const num = (v, d) => (Number.isFinite(+v) && v !== '' && v != null ? +v : d);
   x.scenarios = (e.scenarios || []).map((sc) => ({
@@ -96,16 +97,50 @@ const liveQs = () => exam.questions.filter((q) => !q.ghost);
 const qNumber = (q) => { let n = 0; for (const x of exam.questions) { if (!x.ghost) n++; if (x === q) return x.ghost ? 0 : n; } return 0; };
 const qAtNumber = (n) => liveQs()[n - 1];
 // Soru seviyesi etiketi (1.9.4): Öğrenci / Stajyer / Eğitmen / Uzman. Çıktıda ve listede süzmek için.
-const QTAGS = ['ogr', 'stj', 'egt', 'uzm'];
-const tagName = (k) => (k ? t('tag_' + k) : t('tagNone'));
+// 1.9.9: etiketler Ayarlar'dan düzenlenir (ad değiştir / ekle / sil / sırala). Liste prefs.qtags'ta:
+// [{ k, n: { tr, en, ar } }] ; "Etiketsiz" adı prefs.tagNoneN. Silinen anahtarlar prefs.qtagsDel (başka sınavdan geri gelmesin).
+// Sınav dosyası kullandığı etiketlerin tanımını settings.tagDefs içinde taşır; diğer cihaz bilmediği etiketi oradan öğrenir.
+const QTAGS_DEF = ['ogr', 'stj', 'egt', 'uzm'];
+const QTAGS = [];
+const LANGS3 = ['tr', 'en', 'ar'];
+const tagDefaultDefs = () => QTAGS_DEF.map((k) => ({ k, n: Object.fromEntries(LANGS3.map((l) => [l, t('tag_' + k, null, l)])) }));
+const tagDefs = () => (Array.isArray(prefs.qtags) ? prefs.qtags : tagDefaultDefs());
+const pickName = (n, fb) => { n = n || {}; const l = prefs.uiLang || 'tr'; return (n[l] || n.tr || n.en || n.ar || '').trim() || fb; };
+function tagsReload() { QTAGS.length = 0; tagDefs().forEach((d) => { if (d && d.k && !QTAGS.includes(d.k)) QTAGS.push(d.k); }); }
+const tagNoneName = () => pickName(prefs.tagNoneN, t('tagNone'));
+const tagName = (k) => {
+  if (!k || !QTAGS.includes(k)) return tagNoneName();
+  const d = tagDefs().find((x) => x.k === k);
+  return pickName(d && d.n, QTAGS_DEF.includes(k) ? t('tag_' + k) : k);
+};
+const tagOf = (q) => (q && q.tag && QTAGS.includes(q.tag) ? q.tag : ''); // bilinmeyen/silinmiş etiket = etiketsiz
+const tagOptions = (sel) => QTAGS.map((k) => `<option value="${k}"${sel === k ? ' selected' : ''}>${esc(tagName(k))}</option>`).join('');
+// sınavın kullandığı etiketlerin tanımlarını dosyaya yaz (diğer cihaz öğrensin)
+function tagStamp() {
+  if (!exam || !exam.settings) return;
+  const used = new Set(exam.questions.map(tagOf).filter(Boolean));
+  const defs = tagDefs().filter((d) => used.has(d.k)).map((d) => ({ k: d.k, n: { ...d.n } }));
+  if (defs.length) exam.settings.tagDefs = defs; else delete exam.settings.tagDefs;
+}
+// açılan sınavda bilinmeyen etiket tanımı varsa listeye ekle (silinenler hariç; var olan adlar değişmez)
+function tagLearn(e) {
+  const defs = e && e.settings && Array.isArray(e.settings.tagDefs) ? e.settings.tagDefs : [];
+  const del = new Set(prefs.qtagsDel || []);
+  const add = defs.filter((d) => d && typeof d.k === 'string' && d.k && !QTAGS.includes(d.k) && !del.has(d.k));
+  if (!add.length) return;
+  prefs.qtags = tagDefs().concat(add.map((d) => ({ k: d.k, n: { tr: '', en: '', ar: '', ...(d.n || {}) } })));
+  savePrefs(); tagsReload();
+}
+tagsReload();
 let qFilter = ''; // '' = hepsi, 'none' = etiketsiz, yoksa etiket
-const tagMatch = (q, f) => !f || (f === 'none' ? !q.tag : q.tag === f);
+const tagMatch = (q, f) => !f || (f === 'none' ? !tagOf(q) : tagOf(q) === f);
 const visibleQs = () => exam.questions.filter((q) => tagMatch(q, qFilter));
 
 /* ------------------------------------------------------------------ kayıt / geri al */
 let saveTimer = null;
 function changed() {
   dirty = true;
+  tagStamp();
   updateFileName();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => api.writeAutosave({ exam, filePath, dirty }), 700);
@@ -234,7 +269,7 @@ function questionCard(q, i) {
       <div class="qnum" title="${q.ghost ? t('ghostNum') : t('moveTo')}">${q.ghost ? '👻' : qNumber(q)}</div>
       <span class="qstatus"></span>
       <span class="qlangs">${langBadges(q)}</span>
-      <select class="qtag${q.tag ? ' on' : ''}" title="${esc(t('tagTip'))}"><option value="">${esc(t('tagNone'))}</option>${QTAGS.map((k) => `<option value="${k}" ${q.tag === k ? 'selected' : ''}>${esc(t('tag_' + k))}</option>`).join('')}</select>
+      <select class="qtag${tagOf(q) ? ' on' : ''}" title="${esc(t('tagTip'))}"><option value="">${esc(tagNoneName())}</option>${tagOptions(tagOf(q))}</select>
       <div class="qtools">
         <button data-a="up" title="${t('moveUp')}">↑</button>
         <button data-a="down" title="${t('moveDown')}">↓</button>
@@ -403,7 +438,7 @@ function renderList() {
   box.appendChild(frag);
   $('#emptyMsg').style.display = exam.questions.length ? 'none' : '';
   const fb = $('#filterBar');
-  if (fb) { const vis = visibleQs().length; fb.style.display = qFilter ? '' : 'none'; $('#filterInfo').textContent = t('filterInfo', { n: vis, l: qFilter === 'none' ? t('tagNone') : tagName(qFilter) }); }
+  if (fb) { const vis = visibleQs().length; fb.style.display = qFilter ? '' : 'none'; $('#filterInfo').textContent = t('filterInfo', { n: vis, l: qFilter === 'none' ? tagNoneName() : tagName(qFilter) }); }
   updateSide();
 }
 
@@ -422,14 +457,14 @@ function updateSide() {
     <div class="stat bad"><b>${qs.length - ans}</b><span>${t('missing')}</span></div>` +
     (ghosts.length ? `<div class="stat ghost" id="statGhost" title="${esc(t('ghostStatTip'))}"><b>${ghosts.length}</b><span>👻 ${t('ghostStat')}</span></div>` : '');
   if ($('#statGhost')) { let gi = 0; $('#statGhost').onclick = () => { const g = exam.questions.filter((q) => q.ghost); if (!g.length) return; scrollToQ(g[gi % g.length].id); gi++; }; }
-  $('#navGrid').innerHTML = qs.map((q, i) => `<button class="nav ${isAnswered(q) ? 'ok' : 'bad'} ${selected.has(q.id) ? 'sel' : ''} ${tagMatch(q, qFilter) ? '' : 'off'}" data-id="${q.id}" title="${q.tag ? esc(tagName(q.tag)) : ''}">${i + 1}<small>${isAnswered(q) ? L[q.correct] : '–'}</small></button>`).join('');
+  $('#navGrid').innerHTML = qs.map((q, i) => `<button class="nav ${isAnswered(q) ? 'ok' : 'bad'} ${selected.has(q.id) ? 'sel' : ''} ${tagMatch(q, qFilter) ? '' : 'off'}" data-id="${q.id}" title="${tagOf(q) ? esc(tagName(q.tag)) : ''}">${i + 1}<small>${isAnswered(q) ? L[q.correct] : '–'}</small></button>`).join('');
   const fs = $('#qFilter');
   if (fs) {
     const cnt = (f) => exam.questions.filter((q) => tagMatch(q, f)).length;
-    fs.innerHTML = `<option value="">${esc(t('filterAll'))} (${exam.questions.length})</option>` + QTAGS.map((k) => `<option value="${k}">${esc(t('tag_' + k))} (${cnt(k)})</option>`).join('') + `<option value="none">${esc(t('tagNone'))} (${cnt('none')})</option>`;
+    fs.innerHTML = `<option value="">${esc(t('filterAll'))} (${exam.questions.length})</option>` + QTAGS.map((k) => `<option value="${k}">${esc(tagName(k))} (${cnt(k)})</option>`).join('') + `<option value="none">${esc(tagNoneName())} (${cnt('none')})</option>`;
     fs.value = qFilter;
     const ts = $('#tagSel');
-    if (ts) ts.innerHTML = `<option value="-">…</option>` + QTAGS.map((k) => `<option value="${k}">${esc(t('tag_' + k))}</option>`).join('') + `<option value="">${esc(t('tagClear'))}</option>`;
+    if (ts) ts.innerHTML = `<option value="-">…</option>` + tagOptions('') + `<option value="">${esc(t('tagClear'))}</option>`;
   }
   $('#navGrid').querySelectorAll('.nav').forEach((b) => { b.onclick = () => { if (b.classList.contains('off')) { qFilter = ''; renderList(); } scrollToQ(b.dataset.id); }; });
   // ana cevap anahtarı (listenin sonunda)
@@ -1613,7 +1648,7 @@ const mlDir = (ml) => (ml && ml[CL()] ? (CL() === 'ar' ? 'rtl' : 'ltr') : 'auto'
 // arşiv sorusunu sınav sorusuna çevirir: seçenekler karıştırılır, seçenek sayısı ayara uyar
 function bankToQuestion(bq) {
   const q = newQuestion();
-  if (bq.tag && QTAGS.includes(bq.tag)) q.tag = bq.tag;
+  if (bq.tag && typeof bq.tag === 'string') q.tag = bq.tag;
   Object.assign(q.text, ML(bq.text));
   const n = Math.max(2, Math.min(5, S().optionCount || 5));
   const opts = bq.options.map((o, i) => ({ o, ok: i === bq.correct })).filter((x) => mlPick(x.o) || x.ok);
@@ -1681,7 +1716,7 @@ async function bankModal(kind, startTab = 'auto', preset = '') {
       <textarea id="aiSubj" rows="4" dir="auto" style="width:100%;box-sizing:border-box" placeholder="${esc(t('aiSubjectPh'))}"></textarea>
       <div class="row bkopts">
         <label>${esc(t('bkLevel'))} <select class="in" id="aiLvl">${lvlOpts(false)}</select></label>
-        <label>${esc(t('aiTag'))} <select class="in" id="aiTagSel"><option value="">${esc(t('tagNone'))}</option>${QTAGS.map((k) => `<option value="${k}">${esc(t('tag_' + k))}</option>`).join('')}</select></label>
+        <label>${esc(t('aiTag'))} <select class="in" id="aiTagSel"><option value="">${esc(tagNoneName())}</option>${tagOptions('')}</select></label>
         <label>${esc(t('bkCount'))} <input type="number" id="aiCnt" min="1" max="30" value="10"></label>
         <button class="btn primary" id="aiGo">${esc(t('aiGen'))}</button>
       </div>
@@ -1711,7 +1746,7 @@ async function bankModal(kind, startTab = 'auto', preset = '') {
   const L = (k) => letters()[k];
   const itemHtml = (it, i, pane, extra = {}) => {
     const lv = it.lvl ? `<span class="l${it.lvl}">${esc(t('bkL' + it.lvl))}</span>` : '';
-    const tags = `<div class="tags">${lv}<span>${esc(bkTopicName(it.topic, kind))}</span>${it.sub ? `<span>${esc(t('sub_' + it.sub) === 'sub_' + it.sub ? it.sub : t('sub_' + it.sub))}</span>` : ''}${it.tag ? `<span class="tagc">${esc(tagName(it.tag))}</span>` : ''}${it.src === 'mine' ? `<span class="mine">${esc(t('bkTmine'))}</span>` : ''}${extra.used ? `<span>${esc(t('bkUsed'))}</span>` : ''}${extra.inExam ? `<span>${esc(t('bkInExam'))}</span>` : ''}</div>`;
+    const tags = `<div class="tags">${lv}<span>${esc(bkTopicName(it.topic, kind))}</span>${it.sub ? `<span>${esc(t('sub_' + it.sub) === 'sub_' + it.sub ? it.sub : t('sub_' + it.sub))}</span>` : ''}${tagOf(it) ? `<span class="tagc">${esc(tagName(it.tag))}</span>` : ''}${it.src === 'mine' ? `<span class="mine">${esc(t('bkTmine'))}</span>` : ''}${extra.used ? `<span>${esc(t('bkUsed'))}</span>` : ''}${extra.inExam ? `<span>${esc(t('bkInExam'))}</span>` : ''}</div>`;
     let inner;
     if (isQ) {
       inner = `<div class="s" dir="${mlDir(it.text)}">${esc(mlPick(it.text))}</div>` + it.options.map((o, k) => mlPick(o) ? `<div class="o${k === it.correct ? ' c' : ''}" dir="auto">${L(k)}) ${esc(mlPick(o))}${k === it.correct ? ' ✓' : ''}</div>` : '').join('');
@@ -2334,7 +2369,7 @@ async function outputModal() {
       <select class="in" id="outLang2" style="width:auto"><option value="">${t('none')}</option>${LK.map((k) => `<option value="${k}">${window.LANGS[k]}</option>`).join('')}</select></label>
       <span style="color:var(--muted);font-size:12px">🖼 ${template ? esc(template.name) : t('noTemplate')}</span></div>
     <div class="row"><label style="display:flex;gap:8px;align-items:center">${esc(t('outTag'))}
-      <select class="in" id="outTag" style="width:auto"><option value="">${esc(t('filterAll'))} (${liveQs().length})</option>${QTAGS.map((k) => `<option value="${k}">${esc(t('tag_' + k))} (${liveQs().filter((q) => q.tag === k).length})</option>`).join('')}<option value="none">${esc(t('tagNone'))} (${liveQs().filter((q) => !q.tag).length})</option></select></label></div>
+      <select class="in" id="outTag" style="width:auto"><option value="">${esc(t('filterAll'))} (${liveQs().length})</option>${QTAGS.map((k) => `<option value="${k}">${esc(tagName(k))} (${liveQs().filter((q) => tagOf(q) === k).length})</option>`).join('')}<option value="none">${esc(tagNoneName())} (${liveQs().filter((q) => !tagOf(q)).length})</option></select></label></div>
     <div style="font-size:12px;color:var(--muted)">${t('outputContent')}</div>
     <div class="outsec">${secs.map(([k, l, n]) => `<label class="chk"><input type="checkbox" class="outSec" value="${k}" ${has[k] ? 'checked' : ''} ${n ? '' : 'disabled'}> ${t(l)} (${n})</label>`).join('')}</div>
     ${missing ? `<div class="status" id="outMissing">⚠ ${t('answersMissingWarn', { n: missing })}</div>` : ''}
@@ -2396,6 +2431,7 @@ function settingsForm() {
     <div class="margins">${['top', 'bottom', 'left', 'right'].map((k) => `<label>${t(k)}<input type="number" step="0.1" min="0" max="10" data-m="${k}" value="${s.margins[k]}"></label>`).join('')}</div>
     ${APPINFO.canUpdate ? updSettingsHtml() : ''}
     <div class="verline"><span>${esc(versionText())}</span>${APPINFO.canUpdate ? `<button class="btn primary" id="stUpdNow">🔄 ${t('updCheck')}</button>` : ''}${APPINFO.canPatch ? `<button class="btn" id="stUpd">${t('updLoad')}</button>` : ''}</div>`;
+  const tagEd = tagEditor(); body.appendChild(tagEd.box);           // Ayarlar > Soru seviye etiketleri (1.9.9)
   if (window.AI) body.appendChild(window.AI.settingsSection());     // Ayarlar > Yapay Zeka (1.9.4)
   if (window.Ceviri) { const st = window.Ceviri.stats(); const d = document.createElement('p'); d.className = 'hint trstats'; d.textContent = t('trStats', { m: st.memory, d: st.dictionary, a: st.aviation }); body.appendChild(d); }
   if (window.Kullanim) body.appendChild(window.Kullanim.kart());   // Ayarlar > Kullanım Limitleri
@@ -2436,10 +2472,81 @@ function settingsForm() {
     s.scenLines = Math.max(0, Math.min(30, parseInt($('#stScenLines', body).value, 10) || 0));
     prefs.syncLang = $('#stSync', body).checked;
     if (APPINFO.canUpdate) updSettingsRead(body);
+    tagEd.apply();
     savePrefs();
   };
   return { body, apply };
 }
+/* ------------------------------------------------------------------ soru seviye etiketleri (1.9.9) */
+// Ayarlar'da etiketleri düzenleme: ad (TR/EN/AR), ekle, sil, sırala, varsayılana dön.
+// Çalışma kopyası üzerinde düzenlenir; Tamam'da (telefonda her değişiklikte) uygulanır.
+function tagEditor() {
+  let work = tagDefs().map((d) => ({ k: d.k, n: { tr: '', en: '', ar: '', ...(d.n || {}) } }));
+  let none = { tr: '', en: '', ar: '', ...(prefs.tagNoneN || {}) };
+  const removed = new Set();
+  const box = document.createElement('section');
+  box.className = 'tagedbox';
+  const usedIn = (k) => exam.questions.filter((q) => q.tag === k).length;
+  const ph = (l) => ({ tr: 'Türkçe', en: 'English', ar: 'العربية' }[l]);
+  const inputs = (n, i) => LANGS3.map((l) => `<input class="in" type="text" maxlength="40" data-i="${i}" data-l="${l}" dir="${l === 'ar' ? 'rtl' : 'ltr'}" placeholder="${ph(l)}" value="${esc(n[l] || '')}">`).join('');
+  const fire = () => box.dispatchEvent(new Event('change', { bubbles: true }));
+  const draw = () => {
+    box.innerHTML = `<h4>🏷 ${esc(t('tagEdTitle'))}</h4>
+      <p class="hint">${esc(t('tagEdHint'))}</p>
+      <div class="tagedhead"><span></span><span>TR</span><span>EN</span><span>AR</span><span></span></div>
+      <div class="tagedrow none"><span class="tagedk">○</span>${inputs(none, -1)}<span class="tagedbtns"><i class="hint">${esc(t('tagEdFixed'))}</i></span></div>
+      ${work.map((d, i) => { const u = usedIn(d.k); return `<div class="tagedrow"><span class="tagedk">${i + 1}</span>${inputs(d.n, i)}<span class="tagedbtns">
+        <button class="btn sm" data-up="${i}" title="${esc(t('moveUp'))}"${i ? '' : ' disabled'}>▲</button><button class="btn sm" data-dn="${i}" title="${esc(t('moveDown'))}"${i < work.length - 1 ? '' : ' disabled'}>▼</button>
+        <button class="btn sm danger" data-rm="${i}" title="${esc(t('tagEdDel'))}">🗑</button>${u ? `<small class="hint">${esc(t('tagEdUsed', { n: u }))}</small>` : ''}</span></div>`; }).join('')}
+      <div class="tagedfoot"><button class="btn" id="tgAdd">＋ ${esc(t('tagEdAdd'))}</button><button class="btn" id="tgReset">↺ ${esc(t('tagEdReset'))}</button></div>`;
+    box.querySelectorAll('input[data-i]').forEach((inp) => {
+      inp.oninput = () => { const i = +inp.dataset.i; (i < 0 ? none : work[i].n)[inp.dataset.l] = inp.value; };
+    });
+    box.querySelectorAll('[data-up]').forEach((b) => { b.onclick = () => { const i = +b.dataset.up; [work[i - 1], work[i]] = [work[i], work[i - 1]]; draw(); fire(); }; });
+    box.querySelectorAll('[data-dn]').forEach((b) => { b.onclick = () => { const i = +b.dataset.dn; [work[i + 1], work[i]] = [work[i], work[i + 1]]; draw(); fire(); }; });
+    box.querySelectorAll('[data-rm]').forEach((b) => {
+      b.onclick = async () => {
+        const d = work[+b.dataset.rm]; const u = usedIn(d.k);
+        const nm = pickName(d.n, d.k);
+        if (!(await confirmBox(u ? t('tagEdDelAskUsed', { l: nm, n: u }) : t('tagEdDelAsk', { l: nm })))) return;
+        removed.add(d.k); work = work.filter((x) => x !== d); draw(); fire();
+      };
+    });
+    $('#tgAdd', box).onclick = () => {
+      let k; do { k = 'c' + Math.random().toString(36).slice(2, 8); } while (work.some((x) => x.k === k));
+      work.push({ k, n: { tr: '', en: '', ar: '' } }); draw();
+      const last = box.querySelectorAll(`input[data-i="${work.length - 1}"]`); const f = [...last].find((x) => x.dataset.l === (prefs.uiLang || 'tr')) || last[0];
+      if (f) f.focus();
+    };
+    $('#tgReset', box).onclick = async () => {
+      if (!(await confirmBox(t('tagEdResetAsk')))) return;
+      work.forEach((d) => { if (!QTAGS_DEF.includes(d.k)) removed.add(d.k); });
+      work = tagDefaultDefs(); none = { tr: '', en: '', ar: '' }; QTAGS_DEF.forEach((k) => removed.delete(k)); draw(); fire();
+    };
+  };
+  draw();
+  const apply = () => {
+    // adı hiç yazılmamış yeni etiketler kaydedilmez
+    const keep = work.filter((d) => LANGS3.some((l) => (d.n[l] || '').trim()) || QTAGS_DEF.includes(d.k))
+      .map((d) => ({ k: d.k, n: Object.fromEntries(LANGS3.map((l) => [l, (d.n[l] || '').trim()])) }));
+    const gone = tagDefs().map((d) => d.k).filter((k) => !keep.some((d) => d.k === k));
+    gone.forEach((k) => removed.add(k));
+    prefs.qtags = keep;
+    const nn = Object.fromEntries(LANGS3.map((l) => [l, (none[l] || '').trim()]));
+    if (LANGS3.some((l) => nn[l])) prefs.tagNoneN = nn; else delete prefs.tagNoneN;
+    const del = new Set(prefs.qtagsDel || []);
+    removed.forEach((k) => { if (!keep.some((d) => d.k === k)) del.add(k); });
+    keep.forEach((d) => del.delete(d.k));
+    prefs.qtagsDel = [...del].slice(-200);
+    // açık sınavda silinen etiketi taşıyan sorular etiketsiz olur (soru silinmez)
+    exam.questions.forEach((q) => { if (q.tag && !keep.some((d) => d.k === q.tag)) q.tag = ''; });
+    if (qFilter && qFilter !== 'none' && !keep.some((d) => d.k === qFilter)) qFilter = '';
+    tagsReload();
+    savePrefs();
+  };
+  return { box, apply };
+}
+
 /* ------------------------------------------------------------------ admin iletişim */
 // Öneri ve talepler yöneticiye iletilir. Alıcı adres programda yer almaz: mesaj güncelleme projesine yazılır,
 // yöneticinin aktarım betiği oradan alıp yöneticiye e-posta olarak gönderir. Gönderilemeyen mesaj saklanır, sonra yeniden denenir.

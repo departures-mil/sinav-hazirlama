@@ -1,9 +1,9 @@
 {
- "version": "1.9.8",
+ "version": "1.9.9",
  "minBase": "1.9.0",
- "notes": "Arşiv/Otomatik soru penceresinde Ctrl+F ile listede arama: vurgulama, Enter/Shift+Enter ile gezinme, sayaç; Listede bul düğmesi",
- "file": "SinavHazirlama-1.9.8.sinavyama",
- "size": 13773288,
- "sha": "3931ce1b4da962ada1e672e0d178bea1a74243d4a8c4c3fbc23c6f4a73d88dcf",
- "publishedAt": "2026-11-23T08:37:27.230Z"
+ "notes": "Ayarlar > Soru seviye etiketleri: etiket adlarını üç dilde değiştirme, ekleme, silme, sıralama, varsayılana dönme",
+ "file": "SinavHazirlama-1.9.9.sinavyama",
+ "size": 13776368,
+ "sha": "c609865ba43afb1c86cea23c5d47d73d27555f2aa6142edded3992405ef826dd",
+ "publishedAt": "2026-11-23T08:57:53.600Z"
 }
