@@ -1,9 +1,9 @@
 {
- "version": "1.9.4",
+ "version": "1.9.5",
  "minBase": "1.9.0",
- "notes": "Sınav Hazırlama 1.9.4: 👻 Hayalet soru (listede kalır, numaralanmaz, çıktıya girmez; geri getirilebilir) · Soru seviyesi etiketi (Öğrenci/Stajyer/Eğitmen/Uzman) + süzgeç ve çıktı seçimi · Otomatik soru getir düğmeleri en üstte, eklenenler sona gider · Arşiv 6.000+ soruya çıktı (havacılık terimleri, kelime, dil bilgisi, yeni İHA soruları) · 🤖 Danışman ve yapay zekayla soru üretme (kendi anahtarınızla; Ayarlar > Yapay Zeka) · Çeviri: yapay zeka + Google + sözlük, internet yokken de çalışır. Kayıtlarınız olduğu gibi kalır.",
- "file": "SinavHazirlama-1.9.4.sinavyama",
- "size": 13770862,
- "sha": "7ca2531eff6102216b171bff00948191fe1cf81658cafb72d86f6afdde1c75ce",
- "publishedAt": "2026-11-23T07:46:36.583Z"
+ "notes": "Sınav Hazırlama 1.9.5: Soru arşivi artık internetten de güncelleniyor (6.258 soru). İnternet varken '🔴 Çevrimdışı' yazma hatası düzeltildi. Kayıtlarınız olduğu gibi kalır.",
+ "file": "SinavHazirlama-1.9.5.sinavyama",
+ "size": 13770723,
+ "sha": "6c4004cbe65df7d2d16e9a0e3784a89f72d08af07abe8bc9c7d466ffe13dcac3",
+ "publishedAt": "2026-11-23T07:57:15.119Z"
 }
