@@ -1,9 +1,9 @@
 {
- "version": "1.9.6",
+ "version": "1.9.7",
  "minBase": "1.9.0",
- "notes": "Sınav Hazırlama 1.9.6: Yapay zeka bağlantısı düzeltildi — yeni Gemini 3 modelleri (3.8 Flash) varsayılan; kapatılan model ya da yoğunluk hatasında program kendiliğinden başka modele geçer. 'Bağlantıyı dene' artık hangi modelin çalıştığını gösterir. Kayıtlarınız olduğu gibi kalır.",
- "file": "SinavHazirlama-1.9.6.sinavyama",
- "size": 13771823,
- "sha": "dcd4ade16f161a8c1b61a1844fe5a95d900dbb16441c67612175b308cb8c43d2",
- "publishedAt": "2026-11-23T08:21:30.939Z"
+ "notes": "Sınav Hazırlama 1.9.7: Yapay zeka bağlantısı yanıt vermeyen modelde takılmıyor — 25 saniyede yanıt gelmezse program bir sonraki Gemini modeline kendiliğinden geçer ve o oturumda onu kullanır. 'Bağlantıyı dene' hangi modeli denediğini anlık gösterir. Kayıtlarınız olduğu gibi kalır.",
+ "file": "SinavHazirlama-1.9.7.sinavyama",
+ "size": 13772249,
+ "sha": "64224abb686ab5e6f78273812f49c07991be8bcf73c5c63a7294d116923a75f8",
+ "publishedAt": "2026-11-23T08:25:20.856Z"
 }

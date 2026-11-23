@@ -14,6 +14,8 @@
     aiTest: ['Bağlantıyı dene', 'Test connection', 'اختبار الاتصال'],
     aiOk: ['✅ Bağlantı başarılı', '✅ Connection OK', '✅ الاتصال ناجح'],
     aiFail: ['❌ Bağlantı başarısız: {e}', '❌ Connection failed: {e}', '❌ فشل الاتصال: {e}'],
+    aiTimeout: ['{m} zamanında yanıt vermedi (Google yoğun olabilir)', '{m} did not respond in time (Google may be busy)', 'لم يستجب {m} في الوقت المحدد (قد تكون Google مزدحمة)'],
+    aiTrying: ['⏳ Deneniyor: {m}…', '⏳ Trying: {m}…', '⏳ جارٍ التجربة: {m}…'],
     aiNoKey: ['Yapay zeka anahtarı girilmemiş. Ayarlar > Yapay Zeka bölümünden kendi anahtarınızı girin.', 'No AI key set. Enter your own key under Settings > Artificial Intelligence.', 'لم يُدخل مفتاح للذكاء الاصطناعي. أدخل مفتاحك من الإعدادات > الذكاء الاصطناعي.'],
     aiOffline: ['İnternet yok: çevrimdışı danışman kullanılıyor (yerleşik arşiv ve sözlükten yanıt).', 'No internet: using the offline advisor (answers from the built-in archive and dictionary).', 'لا يوجد إنترنت: يُستخدم المستشار غير المتصل (إجابات من الأرشيف والقاموس المدمجين).'],
     aiUseTr: ['Çevirilerde yapay zekayı kullan (havacılık terimlerine sadık, en kaliteli)', 'Use AI for translations (faithful to aviation terminology, highest quality)', 'استخدام الذكاء الاصطناعي في الترجمة (وفيّ لمصطلحات الطيران، أعلى جودة)'],
@@ -67,18 +69,25 @@
     if (!c.key) throw new Error(window.t('aiNoKey'));
     const p = c.provider || 'gemini';
     const first = c.model || PROV[p].models[0];
-    const chain = [first, ...PROV[p].models.filter((m) => m !== first)];
+    // 1.9.7: bu oturumda yoğunluk yüzünden başka model çalıştıysa önce onu dene (her çağrıda bekletmesin)
+    const start = (sticky && sticky.p === p && sticky.from === first) ? sticky.model : first;
+    const chain = [start, ...[first, ...PROV[p].models].filter((m, k, a) => m !== start && a.indexOf(m) === k)];
     let lastErr = null, triedGone = false;
     for (let i = 0; i < chain.length; i++) {
       const model = chain[i];
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
+          if (opts.onTry) { try { opts.onTry(model); } catch { /* yok */ } }
           const out = await chatOnce(c, p, model, messages, opts);
           if (model !== first && triedGone) { c.model = model; set(c); }   // eski model kapalı: yeni modeli kalıcı yap
+          else if (model !== first) sticky = { p, from: first, model };    // yoğunluk: bu oturumda bunu kullan
+          else sticky = null;
+          window.AI.lastModel = model;
           return out;
         } catch (e) {
           lastErr = e;
           const msg = String(e && e.message || e);
+          if (e && e.name === 'Timeout') break;                          // yanıt gelmedi: beklemeden sıradaki modele geç
           if (e && e.name === 'AbortError') throw e;
           if (GONE.test(msg)) {
             triedGone = true;
@@ -93,9 +102,11 @@
     }
     throw lastErr || new Error('AI');
   }
+  let sticky = null;
   async function chatOnce(c, p, model, messages, opts) {
     const sys = opts.system || '';
-    const ac = new AbortController(); const tm = setTimeout(() => ac.abort(), opts.timeout || 90000);
+    const ac = new AbortController(); let timedOut = false;
+    const tm = setTimeout(() => { timedOut = true; ac.abort(); }, opts.timeout || 90000);
     const o = { signal: ac.signal, method: 'POST', headers: { 'Content-Type': 'application/json' } };
     let url, body, parse;
     if (p === 'gemini') {
@@ -130,6 +141,9 @@
       const out = parse(j);
       if (!out) throw new Error('empty');
       return out;
+    } catch (e) {
+      if (timedOut) { const te = new Error(window.t('aiTimeout', { m: model })); te.name = 'Timeout'; throw te; }
+      throw e;
     } finally { clearTimeout(tm); }
   }
   const jsonOf = (s) => {
@@ -291,7 +305,7 @@ Each question: exactly ${optionCount || 5} options, exactly one correct (index i
     ['#aiModel', '#aiKey', '#aiUseTr'].forEach((s) => { box.querySelector(s).onchange = save; box.querySelector(s).oninput = save; });
     box.querySelector('#aiTest').onclick = async () => {
       save(); const info = box.querySelector('#aiInfo'); info.textContent = t('aiThinking');
-      try { await chat([{ role: 'user', content: 'Reply with OK.' }], { maxTokens: 256, timeout: 60000 }); const m = get().model; if (m) box.querySelector('#aiModel').value = m; info.textContent = t('aiOk') + (m ? ' (' + m + ')' : ''); } catch (e) { info.textContent = t('aiFail', { e: e.message }); }
+      try { await chat([{ role: 'user', content: 'Reply with OK.' }], { maxTokens: 256, timeout: 25000, onTry: (m) => { info.textContent = t('aiTrying', { m }); } }); const m = window.AI.lastModel || get().model; info.textContent = t('aiOk') + (m ? ' (' + m + ')' : ''); } catch (e) { info.textContent = t('aiFail', { e: e.message }); }
     };
     return box;
   }
