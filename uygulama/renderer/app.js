@@ -2,6 +2,7 @@
 const api = window.api;
 const LK = ['tr', 'en', 'ar'];
 const t = window.t;
+window.__app = {};
 const $ = (s, r = document) => r.querySelector(s);
 const uid = () => Math.random().toString(36).slice(2, 10);
 const newId = () => (Date.now().toString(36) + uid() + uid()).slice(0, 24);
@@ -24,6 +25,7 @@ let template = null;
 const selected = new Set();
 const undoStack = [];
 const prefs = loadPrefs();
+window.prefs = prefs;
 
 function newExam() {
   return {
@@ -52,7 +54,7 @@ function normalizeExam(e) {
   x.questions = (e.questions || []).map((q) => {
     const opts = (q.options || []).slice(0, 5).map(ML);
     while (opts.length < 5) opts.push(ML());
-    return { id: q.id || uid(), text: ML(q.text), options: opts, correct: Number.isInteger(q.correct) ? q.correct : -1 };
+    return { id: q.id || uid(), text: ML(q.text), options: opts, correct: Number.isInteger(q.correct) ? q.correct : -1, ghost: !!q.ghost, tag: QTAGS.includes(q.tag) ? q.tag : '' };
   });
   const num = (v, d) => (Number.isFinite(+v) && v !== '' && v != null ? +v : d);
   x.scenarios = (e.scenarios || []).map((sc) => ({
@@ -89,6 +91,16 @@ const S = () => exam.settings;
 const CL = () => prefs.contentLang;
 const letters = (lang) => window.LETTERS[lang || CL()];
 const isAnswered = (q) => q.correct >= 0 && q.correct < S().optionCount;
+// Hayalet soru (1.9.4): listede durur, okunup düzenlenebilir ama numaralanmaz, sayılmaz, çıktıya ve cevap anahtarına girmez.
+const liveQs = () => exam.questions.filter((q) => !q.ghost);
+const qNumber = (q) => { let n = 0; for (const x of exam.questions) { if (!x.ghost) n++; if (x === q) return x.ghost ? 0 : n; } return 0; };
+const qAtNumber = (n) => liveQs()[n - 1];
+// Soru seviyesi etiketi (1.9.4): Öğrenci / Stajyer / Eğitmen / Uzman. Çıktıda ve listede süzmek için.
+const QTAGS = ['ogr', 'stj', 'egt', 'uzm'];
+const tagName = (k) => (k ? t('tag_' + k) : t('tagNone'));
+let qFilter = ''; // '' = hepsi, 'none' = etiketsiz, yoksa etiket
+const tagMatch = (q, f) => !f || (f === 'none' ? !q.tag : q.tag === f);
+const visibleQs = () => exam.questions.filter((q) => tagMatch(q, qFilter));
 
 /* ------------------------------------------------------------------ kayıt / geri al */
 let saveTimer = null;
@@ -212,16 +224,17 @@ function langBadges(q) {
 
 function questionCard(q, i) {
   const card = document.createElement('section');
-  card.className = 'card q';
+  card.className = 'card q' + (q.ghost ? ' ghost' : '');
   card.id = 'q-' + q.id;
   const n = S().optionCount;
   const L = letters();
   card.innerHTML = `
     <div class="qhead">
       <input type="checkbox" class="qsel" ${selected.has(q.id) ? 'checked' : ''}>
-      <div class="qnum" title="${t('moveTo')}">${i + 1}</div>
+      <div class="qnum" title="${q.ghost ? t('ghostNum') : t('moveTo')}">${q.ghost ? '👻' : qNumber(q)}</div>
       <span class="qstatus"></span>
       <span class="qlangs">${langBadges(q)}</span>
+      <select class="qtag${q.tag ? ' on' : ''}" title="${esc(t('tagTip'))}"><option value="">${esc(t('tagNone'))}</option>${QTAGS.map((k) => `<option value="${k}" ${q.tag === k ? 'selected' : ''}>${esc(t('tag_' + k))}</option>`).join('')}</select>
       <div class="qtools">
         <button data-a="up" title="${t('moveUp')}">↑</button>
         <button data-a="down" title="${t('moveDown')}">↓</button>
@@ -229,6 +242,7 @@ function questionCard(q, i) {
         <button data-a="dup" title="${t('duplicate')}">⧉</button>
         <button data-a="shuffle" title="${t('shuffleOptions')}">⇄</button>
         <button data-a="tr" title="${t('translate')}">🌐 ${t('translate')}</button>
+        <button data-a="ghost" class="ghostbtn${q.ghost ? ' on' : ''}" title="${t(q.ghost ? 'ghostOffTip' : 'ghostOnTip')}">👻 ${t(q.ghost ? 'ghostOff' : 'ghostOn')}</button>
         <button data-a="del" class="del" title="${t('delete')}">🗑</button>
       </div>
     </div>
@@ -263,7 +277,8 @@ function questionCard(q, i) {
   });
   $('.qsel', card).onchange = (e) => { if (e.target.checked) selected.add(q.id); else selected.delete(q.id); updateSide(); };
   card.querySelectorAll('[data-a]').forEach((b) => { b.onclick = () => questionAction(b.dataset.a, q); });
-  $('.qnum', card).onclick = () => moveToModal(q);
+  $('.qnum', card).onclick = () => { if (!q.ghost) moveToModal(q); };
+  $('.qtag', card).onchange = (e) => { snap(); q.tag = e.target.value; e.target.classList.toggle('on', !!q.tag); updateSide(); changed(); };
   refreshCorrect(card, q);
   return card;
 }
@@ -275,6 +290,7 @@ function refreshCorrect(card, q) {
   const ok = isAnswered(q);
   st.className = 'qstatus ' + (ok ? 'ok' : 'bad');
   st.textContent = ok ? `✓ ${t('answer')}: ${L[q.correct]}` : `⚠ ${t('noAnswer')}`;
+  if (q.ghost) { st.className = 'qstatus ghost'; st.textContent = `👻 ${t('ghostStatus')}` + (ok ? ` · ${L[q.correct]}` : ''); }
   card.classList.toggle('done', ok);
   card.classList.toggle('missing', !ok);
 }
@@ -317,8 +333,10 @@ async function questionAction(a, q) {
     renderList(); changed(); scrollToQ(c.id, true);
   } else if (a === 'shuffle') {
     snap(); shuffleQuestionOptions(q); rerenderCard(q);
+  } else if (a === 'ghost') {
+    setGhost([q], !q.ghost);
   } else if (a === 'del') {
-    if (!(await confirmBox(t('confirmDeleteOne', { n: i + 1 })))) return;
+    if (!(await confirmBox(t('confirmDeleteOne', { n: q.ghost ? '👻' : qNumber(q) })))) return;
     snap(); list.splice(i, 1); selected.delete(q.id); renderList(); changed();
   } else if (a === 'tr') {
     await translateQuestion(q);
@@ -327,23 +345,34 @@ async function questionAction(a, q) {
   }
 }
 
+// Hayalet yap / geri getir
+function setGhost(qs, on) {
+  const list = qs.filter((q) => !!q.ghost !== on);
+  if (!list.length) return;
+  snap();
+  list.forEach((q) => { q.ghost = on; });
+  renderList(); changed();
+  toast(t(on ? 'ghostMade' : 'ghostBack', { n: list.length }), 'ok', [{ label: t('undo'), onClick: () => undo() }]);
+}
 // Soruyu sıra numarasıyla taşı: 95 -> 40 ise 40..94 birer sıra aşağı kayar; "yer değiştir" seçilirse yalnızca ikisi yer değiştirir
 function moveQuestionTo(q, to, swap) {
   const list = exam.questions;
   const from = list.indexOf(q);
-  const j = to - 1;
-  if (from < 0 || j < 0 || j >= list.length || j === from) return false;
+  const target = qAtNumber(to);
+  const j = target ? list.indexOf(target) : -1;
+  const fromN = qNumber(q);
+  if (from < 0 || j < 0 || j === from) return false;
   snap();
   if (swap) [list[from], list[j]] = [list[j], list[from]];
   else { list.splice(from, 1); list.splice(j, 0, q); }
   renderList(); changed(); scrollToQ(q.id);
-  toast(t(swap ? 'swapped' : 'movedTo', { a: from + 1, b: to }), 'ok');
+  toast(t(swap ? 'swapped' : 'movedTo', { a: fromN, b: to }), 'ok');
   return true;
 }
 function moveToModal(q) {
-  const max = exam.questions.length;
-  const n = exam.questions.indexOf(q) + 1;
-  if (max < 2) return;
+  const max = liveQs().length;
+  const n = qNumber(q);
+  if (max < 2 || !n) return;
   const body = document.createElement('div');
   body.innerHTML = `
     <p class="help">${esc(t('moveToHelp'))}</p>
@@ -370,9 +399,11 @@ function renderList() {
   const box = $('#qList');
   box.innerHTML = '';
   const frag = document.createDocumentFragment();
-  exam.questions.forEach((q, i) => frag.appendChild(questionCard(q, i)));
+  exam.questions.forEach((q, i) => { const c = questionCard(q, i); if (!tagMatch(q, qFilter)) c.style.display = 'none'; frag.appendChild(c); });
   box.appendChild(frag);
   $('#emptyMsg').style.display = exam.questions.length ? 'none' : '';
+  const fb = $('#filterBar');
+  if (fb) { const vis = visibleQs().length; fb.style.display = qFilter ? '' : 'none'; $('#filterInfo').textContent = t('filterInfo', { n: vis, l: qFilter === 'none' ? t('tagNone') : tagName(qFilter) }); }
   updateSide();
 }
 
@@ -381,15 +412,26 @@ function updateSide() {
   updateTabCounts();
   if (prefs.tab === 'scen') return updateSideScen();
   if (prefs.tab === 'vocab') return updateSideVocab();
-  const qs = exam.questions;
+  const qs = liveQs();
+  const ghosts = exam.questions.filter((q) => q.ghost);
   const L = letters();
   const ans = qs.filter(isAnswered).length;
   $('#stats').innerHTML = `
     <div class="stat"><b>${qs.length}</b><span>${t('total')}</span></div>
     <div class="stat ok"><b>${ans}</b><span>${t('answered')}</span></div>
-    <div class="stat bad"><b>${qs.length - ans}</b><span>${t('missing')}</span></div>`;
-  $('#navGrid').innerHTML = qs.map((q, i) => `<button class="nav ${isAnswered(q) ? 'ok' : 'bad'} ${selected.has(q.id) ? 'sel' : ''}" data-id="${q.id}">${i + 1}<small>${isAnswered(q) ? L[q.correct] : '–'}</small></button>`).join('');
-  $('#navGrid').querySelectorAll('.nav').forEach((b) => { b.onclick = () => scrollToQ(b.dataset.id); });
+    <div class="stat bad"><b>${qs.length - ans}</b><span>${t('missing')}</span></div>` +
+    (ghosts.length ? `<div class="stat ghost" id="statGhost" title="${esc(t('ghostStatTip'))}"><b>${ghosts.length}</b><span>👻 ${t('ghostStat')}</span></div>` : '');
+  if ($('#statGhost')) { let gi = 0; $('#statGhost').onclick = () => { const g = exam.questions.filter((q) => q.ghost); if (!g.length) return; scrollToQ(g[gi % g.length].id); gi++; }; }
+  $('#navGrid').innerHTML = qs.map((q, i) => `<button class="nav ${isAnswered(q) ? 'ok' : 'bad'} ${selected.has(q.id) ? 'sel' : ''} ${tagMatch(q, qFilter) ? '' : 'off'}" data-id="${q.id}" title="${q.tag ? esc(tagName(q.tag)) : ''}">${i + 1}<small>${isAnswered(q) ? L[q.correct] : '–'}</small></button>`).join('');
+  const fs = $('#qFilter');
+  if (fs) {
+    const cnt = (f) => exam.questions.filter((q) => tagMatch(q, f)).length;
+    fs.innerHTML = `<option value="">${esc(t('filterAll'))} (${exam.questions.length})</option>` + QTAGS.map((k) => `<option value="${k}">${esc(t('tag_' + k))} (${cnt(k)})</option>`).join('') + `<option value="none">${esc(t('tagNone'))} (${cnt('none')})</option>`;
+    fs.value = qFilter;
+    const ts = $('#tagSel');
+    if (ts) ts.innerHTML = `<option value="-">…</option>` + QTAGS.map((k) => `<option value="${k}">${esc(t('tag_' + k))}</option>`).join('') + `<option value="">${esc(t('tagClear'))}</option>`;
+  }
+  $('#navGrid').querySelectorAll('.nav').forEach((b) => { b.onclick = () => { if (b.classList.contains('off')) { qFilter = ''; renderList(); } scrollToQ(b.dataset.id); }; });
   // ana cevap anahtarı (listenin sonunda)
   const n = S().optionCount;
   $('#keyGrid').innerHTML = qs.map((q, i) => `<div class="kcell ${isAnswered(q) ? '' : 'none'}"><b data-id="${q.id}">${i + 1}.</b><select data-id="${q.id}"><option value="-1">–</option>${L.slice(0, n).map((l, k) => `<option value="${k}" ${q.correct === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`).join('');
@@ -436,7 +478,7 @@ function applyTab() {
   $('#vocabPane').style.display = MOBILE || tab === 'vocab' ? '' : 'none';
 }
 function updateTabCounts() {
-  $('#cntTest').textContent = exam.questions.length;
+  $('#cntTest').textContent = liveQs().length;
   $('#cntScen').textContent = exam.scenarios.length;
   $('#cntVocab').textContent = vocabCountText();
 }
@@ -478,6 +520,7 @@ function scenarioCard(sc, i) {
         <button data-a="down" title="${t('moveDown')}">↓</button>
         <button data-a="dup" title="${t('duplicate')}">⧉</button>
         <button data-a="tr" title="${t('translate')}">🌐 ${t('translate')}</button>
+        <button data-a="ghost" class="ghostbtn${q.ghost ? ' on' : ''}" title="${t(q.ghost ? 'ghostOffTip' : 'ghostOnTip')}">👻 ${t(q.ghost ? 'ghostOff' : 'ghostOn')}</button>
         <button data-a="del" class="del" title="${t('delete')}">🗑</button>
       </div>
     </div>
@@ -1162,7 +1205,7 @@ async function vocabCheck(manual = true) {
     const need = [...res.values()].filter((r) => (r.it[r.f.k] || '').trim() && (!r.ok || !sameText(r.mt, r.it[r.f.k], r.f.lang))).slice(0, manual ? 250 : 60);
     await runPool(need.map((r) => async () => {
       try {
-        const [fw, bw] = await Promise.all([api.translateDict({ text: r.it.term, from: 'en', to: r.f.lang }), r.ok ? null : api.translateDict({ text: r.it[r.f.k], from: r.f.lang, to: 'en' })]);
+        const [fw, bw] = await Promise.all([dictLookup({ text: r.it.term, from: 'en', to: r.f.lang }), r.ok ? null : dictLookup({ text: r.it[r.f.k], from: r.f.lang, to: 'en' })]);
         const alts = [fw.text, ...(fw.alts || [])].filter(Boolean);
         if (!r.ok) r.ok = alts.some((a) => judge(r.f, r.it.term, r.it[r.f.k], a, '')) || (bw && [bw.text, ...(bw.alts || [])].some((b) => judge(r.f, r.it.term, r.it[r.f.k], '', b)));
         r.alts = alts;
@@ -1194,6 +1237,7 @@ async function vocabCheck(manual = true) {
 }
 
 /* ------------------------------------------------------------------ modal / bildirim */
+window.modal = (...a) => modal(...a);
 function modal({ title, body, buttons = [], wide, onClose }) {
   const bd = document.createElement('div');
   bd.className = 'backdrop';
@@ -1323,7 +1367,16 @@ function findOpen() {
 }
 
 /* ------------------------------------------------------------------ çeviri */
+// tek kelime sözlük: çevrimiçi Google sözlüğü; olmazsa yerleşik sözlük (1.9.4)
+async function dictLookup(o) {
+  try { if (navigator.onLine === false) throw new Error('offline'); return await api.translateDict(o); } catch (e) {
+    const d = window.Ceviri && window.Ceviri.dict(o.text, o.from, o.to);
+    if (d) return d;
+    throw e;
+  }
+}
 async function translateText(text, from, to) {
+  if (window.Ceviri) return window.Ceviri.translate(text, from, to);
   return api.translate({ text, from, to });
 }
 async function runPool(tasks, n, onProgress, ctl) {
@@ -1408,7 +1461,7 @@ function parseQRange(txt, max) {
 }
 function translateAllModal(preset) {
   const nSel = exam.questions.filter((q) => selected.has(q.id)).length;
-  const max = exam.questions.length;
+  const max = liveQs().length;
   const body = document.createElement('div');
   body.innerHTML = `
     <p class="help">${t('translateHelp')}</p>
@@ -1451,7 +1504,7 @@ function translateAllModal(preset) {
         else {
           const idx = parseQRange($('#trRange', body).value, max);
           if (!idx) { $('#trMsg', body).textContent = t('trRangeBad', { max }); return; }
-          fields = questionFields(idx.map((k) => exam.questions[k]));
+          fields = questionFields(idx.map((k) => liveQs()[k]));
         }
         const tasks = [];
         fields.forEach((ml) => {
@@ -1484,12 +1537,13 @@ function translateAllModal(preset) {
 
 /* ------------------------------------------------------------------ otomatik getirme ve arşiv */
 const BK_TOPICS = { q: ['uav', 'eng', 'vocab', 'oxf', 'mine'], s: ['uav', 'eng', 'mine'] };
-const bkTopicName = (k, kind) => t({ uav: 'bkTuav', eng: kind === 's' ? 'bkTengR' : 'bkTeng', vocab: 'bkTvocab', oxf: 'bkToxf', mine: 'bkTmine' }[k] || 'bkTmine');
+const bkTopicName = (k, kind) => t({ uav: 'bkTuav', eng: kind === 's' ? 'bkTengR' : 'bkTeng', vocab: 'bkTvocab', oxf: 'bkToxf', mine: 'bkTmine', ai: 'bkTabAi' }[k] || 'bkTmine');
 const mlPick = (ml) => (ml && (ml[CL()] || ml.en || ml.tr || ml.ar)) || '';
 const mlDir = (ml) => (ml && ml[CL()] ? (CL() === 'ar' ? 'rtl' : 'ltr') : 'auto');
 // arşiv sorusunu sınav sorusuna çevirir: seçenekler karıştırılır, seçenek sayısı ayara uyar
 function bankToQuestion(bq) {
   const q = newQuestion();
+  if (bq.tag && QTAGS.includes(bq.tag)) q.tag = bq.tag;
   Object.assign(q.text, ML(bq.text));
   const n = Math.max(2, Math.min(5, S().optionCount || 5));
   const opts = bq.options.map((o, i) => ({ o, ok: i === bq.correct })).filter((x) => mlPick(x.o) || x.ok);
@@ -1512,7 +1566,8 @@ const examQToBank = (q, lvl) => ({ lvl, topic: 'mine', text: ML(q.text), options
 const examSToBank = (s, lvl) => ({ lvl, topic: 'mine', title: ML(s.title), text: ML(s.text), questions: s.questions.map((q) => ({ text: ML(q.text), answer: ML(q.answer) })) });
 const lastScenPts = () => { const l = exam.scenarios[exam.scenarios.length - 1]; return l && l.questions.length ? +l.questions[l.questions.length - 1].points || 5 : 5; };
 
-async function bankModal(kind, startTab = 'auto') {
+window.bankModal = (...a) => bankModal(...a);
+async function bankModal(kind, startTab = 'auto', preset = '') {
   const B = window.Bank;
   const isQ = kind === 'q';
   const topics = BK_TOPICS[kind];
@@ -1521,7 +1576,7 @@ async function bankModal(kind, startTab = 'auto') {
   const lvlOpts = (all) => (all ? `<option value="0">${esc(t('bkLAll'))}</option>` : '') + [1, 2, 3].map((l) => `<option value="${l}">${esc(t('bkL' + l))}</option>`).join('');
   const body = document.createElement('div');
   body.innerHTML = `
-    <div class="bktabs"><button data-t="auto">${esc(t('bkTabAuto'))}</button><button data-t="arch">${esc(t('bkTabArch'))}</button></div>
+    <div class="bktabs"><button data-t="auto">${esc(t('bkTabAuto'))}</button><button data-t="arch">${esc(t('bkTabArch'))}</button>${isQ ? `<button data-t="ai">${esc(t('bkTabAi'))}</button>` : ''}</div>
     <div class="bkstatus" id="bkStatus">${esc(t('bkChecking'))}</div>
     <div class="bkpane" data-p="auto">
       <div class="row bkopts">
@@ -1549,15 +1604,27 @@ async function bankModal(kind, startTab = 'auto') {
       </div>
       <div class="bkinfo" id="bkAInfo"></div>
       <div class="bklist" id="bkAList"></div>
-    </div>`;
+    </div>
+    ${isQ ? `<div class="bkpane" data-p="ai">
+      <p class="hint" style="margin:0 0 6px;font-size:12px;color:var(--muted)">${esc(t('aiGenHint'))}</p>
+      <textarea id="aiSubj" rows="4" dir="auto" style="width:100%;box-sizing:border-box" placeholder="${esc(t('aiSubjectPh'))}"></textarea>
+      <div class="row bkopts">
+        <label>${esc(t('bkLevel'))} <select class="in" id="aiLvl">${lvlOpts(false)}</select></label>
+        <label>${esc(t('aiTag'))} <select class="in" id="aiTagSel"><option value="">${esc(t('tagNone'))}</option>${QTAGS.map((k) => `<option value="${k}">${esc(t('tag_' + k))}</option>`).join('')}</select></label>
+        <label>${esc(t('bkCount'))} <input type="number" id="aiCnt" min="1" max="30" value="10"></label>
+        <button class="btn primary" id="aiGo">${esc(t('aiGen'))}</button>
+      </div>
+      <div class="bkinfo" id="aiInfo"></div>
+      <div class="bklist" id="aiRes"></div>
+    </div>` : ''}`;
   const lvlSel = $('#bkLvl', body);
   lvlSel.value = String(prefs.bkLvl || 2);
   $('#baSaveLvl', body).value = String(prefs.bkLvl || 2);
   $('#bkCnt', body).value = isQ ? (prefs.bkCntQ || 10) : (prefs.bkCntS || 2);
   if (!isQ) $('#bkPts', body).value = lastScenPts();
   let tab = startTab;
-  const lists = { auto: [], arch: [] }; // görünen öğeler
-  const checked = { auto: new Set(), arch: new Set() };
+  const lists = { auto: [], arch: [], ai: [] }; // görünen öğeler
+  const checked = { auto: new Set(), arch: new Set(), ai: new Set() };
   let addBtn = null;
   const updAdd = () => { if (addBtn) { const n = checked[tab].size; addBtn.textContent = t('bkAdd', { n }); addBtn.disabled = !n; } };
   const setTab = (x) => {
@@ -1573,7 +1640,7 @@ async function bankModal(kind, startTab = 'auto') {
   const L = (k) => letters()[k];
   const itemHtml = (it, i, pane, extra = {}) => {
     const lv = it.lvl ? `<span class="l${it.lvl}">${esc(t('bkL' + it.lvl))}</span>` : '';
-    const tags = `<div class="tags">${lv}<span>${esc(bkTopicName(it.topic, kind))}</span>${it.src === 'mine' ? `<span class="mine">${esc(t('bkTmine'))}</span>` : ''}${extra.used ? `<span>${esc(t('bkUsed'))}</span>` : ''}${extra.inExam ? `<span>${esc(t('bkInExam'))}</span>` : ''}</div>`;
+    const tags = `<div class="tags">${lv}<span>${esc(bkTopicName(it.topic, kind))}</span>${it.sub ? `<span>${esc(t('sub_' + it.sub) === 'sub_' + it.sub ? it.sub : t('sub_' + it.sub))}</span>` : ''}${it.tag ? `<span class="tagc">${esc(tagName(it.tag))}</span>` : ''}${it.src === 'mine' ? `<span class="mine">${esc(t('bkTmine'))}</span>` : ''}${extra.used ? `<span>${esc(t('bkUsed'))}</span>` : ''}${extra.inExam ? `<span>${esc(t('bkInExam'))}</span>` : ''}</div>`;
     let inner;
     if (isQ) {
       inner = `<div class="s" dir="${mlDir(it.text)}">${esc(mlPick(it.text))}</div>` + it.options.map((o, k) => mlPick(o) ? `<div class="o${k === it.correct ? ' c' : ''}" dir="auto">${L(k)}) ${esc(mlPick(o))}${k === it.correct ? ' ✓' : ''}</div>` : '').join('');
@@ -1679,7 +1746,7 @@ async function bankModal(kind, startTab = 'auto') {
     if (top) all = all.filter((x) => x.topic === top);
     if (q) all = all.filter((x) => JSON.stringify([x.text, x.title, x.options, x.questions]).toLocaleLowerCase('tr').includes(q));
     const sigs = examSigs(), used = B.usedSet();
-    const shown = all.slice(0, 300);
+    const shown = all.slice(0, 600);
     lists.arch = shown;
     checked.arch = new Set([...checked.arch].filter((x) => shown.includes(x)));
     $('#bkAInfo', body).textContent = t('bkShown', { n: all.length }) + (all.length > shown.length ? ' ' + t('bkMore', { n: all.length - shown.length }) : '');
@@ -1700,13 +1767,41 @@ async function bankModal(kind, startTab = 'auto') {
     $('#baSrc', body).value = 'mine'; renderArch();
   };
 
+  /* --- yapay zeka --- */
+  if (isQ) {
+    const subj = $('#aiSubj', body);
+    if (preset) subj.value = preset;
+    $('#aiLvl', body).value = String(prefs.bkLvl || 2);
+    if (prefs.aiTag) $('#aiTagSel', body).value = prefs.aiTag;
+    $('#aiGo', body).onclick = async () => {
+      const info = $('#aiInfo', body), res = $('#aiRes', body);
+      const subject = subj.value.trim();
+      if (!subject) { info.textContent = t('aiSubjectPh'); subj.focus(); return; }
+      if (!window.AI || !window.AI.ready()) { info.textContent = t('aiNoKey'); return; }
+      const lvl = +$('#aiLvl', body).value, tag = $('#aiTagSel', body).value, cnt = parseInt($('#aiCnt', body).value, 10) || 10;
+      prefs.aiTag = tag; savePrefs();
+      $('#aiGo', body).disabled = true; info.textContent = t('aiThinking'); res.innerHTML = '';
+      try {
+        const qs = await window.AI.generateQuestions({ subject, lvl, tag, count: cnt, optionCount: S().optionCount });
+        if (!qs.length) throw new Error('empty');
+        const [a] = await B.addMine('q', qs.map((q) => ({ ...q, topic: 'ai' })));
+        lists.ai = qs; checked.ai = new Set(qs);
+        info.textContent = a ? t('bkAutoSaved', { n: a }) : '';
+        res.innerHTML = qs.map((it, i) => itemHtml(it, i, 'ai')).join('');
+        bindList(res, 'ai');
+      } catch (e) { info.textContent = t('aiGenErr', { e: e.message }); }
+      $('#aiGo', body).disabled = false; updAdd();
+    };
+  }
+
   /* --- ekle --- */
   const add = (close) => {
     const items = lists[tab].filter((x) => checked[tab].has(x));
     if (!items.length) return;
     snap();
+    let firstId = null;
     if (isQ) {
-      items.forEach((it) => exam.questions.push(bankToQuestion(it)));
+      items.forEach((it) => { const q = bankToQuestion(it); if (!firstId) firstId = q.id; exam.questions.push(q); });
       prefs.tab = 'test';
     } else {
       const pts = isQ ? 5 : Math.max(0, parseFloat($('#bkPts', body).value) || lastScenPts());
@@ -1715,7 +1810,9 @@ async function bankModal(kind, startTab = 'auto') {
     }
     savePrefs();
     B.markUsed(items.map((x) => x.id));
+    if (qFilter) qFilter = '';
     renderAll(); changed(); close();
+    if (firstId) setTimeout(() => scrollToQ(firstId), 50);
     toast(t('bkAdded', { n: items.length }), 'ok', [{ label: t('undo'), onClick: () => undo() }]);
   };
   const m = modal({
@@ -2099,7 +2196,7 @@ function buildModel(variant, lang, opts = {}) {
     // anlam sütunları: tek sütunda "Anlamı", ikisi birlikteyse dil adlarıyla
     cols: [v.cols.ar && 'meaning', v.cols.tr && 'tr'].filter(Boolean).map((k, _, a) => ({ key: k, label: a.length > 1 ? t(k === 'tr' ? 'lbl_colTr' : 'lbl_colAr', null, lang) : t('lbl_meaning', null, lang) })),
   } : null;
-  const questions = sections.test ? exam.questions.map((q, i) => ({
+  const questions = sections.test ? liveQs().filter((q) => tagMatch(q, opts.tag || '')).map((q, i) => ({
     n: i + 1, stem: pick(q.text), options: q.options.slice(0, s.optionCount).map(pick),
     correct: isAnswered(q) ? q.correct : -1,
   })) : [];
@@ -2152,10 +2249,10 @@ async function outputModal() {
   template = await api.getTemplate();
   await ensureTemplateAuto();
   const body = document.createElement('div');
-  const missing = exam.questions.filter((q) => !isAnswered(q)).length;
-  const has = { test: exam.questions.length > 0, scen: exam.scenarios.length > 0, vocab: vocabFilled().length > 0 };
+  const missing = liveQs().filter((q) => !isAnswered(q)).length;
+  const has = { test: liveQs().length > 0, scen: exam.scenarios.length > 0, vocab: vocabFilled().length > 0 };
   if (!has.test && !has.scen && !has.vocab) has.test = true;
-  const secs = [['test', 'tabTest', exam.questions.length], ['scen', 'tabScen', exam.scenarios.length], ['vocab', 'tabVocab', vocabFilled().length]];
+  const secs = [['test', 'tabTest', liveQs().length], ['scen', 'tabScen', exam.scenarios.length], ['vocab', 'tabVocab', vocabFilled().length]];
   body.innerHTML = `
     <p class="help">${t('outputHint')}</p>
     <div class="row"><label style="display:flex;gap:8px;align-items:center">${t('outputLang')}
@@ -2163,6 +2260,8 @@ async function outputModal() {
       <label style="display:flex;gap:8px;align-items:center" id="outLang2Box">${t('secondLang')}
       <select class="in" id="outLang2" style="width:auto"><option value="">${t('none')}</option>${LK.map((k) => `<option value="${k}">${window.LANGS[k]}</option>`).join('')}</select></label>
       <span style="color:var(--muted);font-size:12px">🖼 ${template ? esc(template.name) : t('noTemplate')}</span></div>
+    <div class="row"><label style="display:flex;gap:8px;align-items:center">${esc(t('outTag'))}
+      <select class="in" id="outTag" style="width:auto"><option value="">${esc(t('filterAll'))} (${liveQs().length})</option>${QTAGS.map((k) => `<option value="${k}">${esc(t('tag_' + k))} (${liveQs().filter((q) => q.tag === k).length})</option>`).join('')}<option value="none">${esc(t('tagNone'))} (${liveQs().filter((q) => !q.tag).length})</option></select></label></div>
     <div style="font-size:12px;color:var(--muted)">${t('outputContent')}</div>
     <div class="outsec">${secs.map(([k, l, n]) => `<label class="chk"><input type="checkbox" class="outSec" value="${k}" ${has[k] ? 'checked' : ''} ${n ? '' : 'disabled'}> ${t(l)} (${n})</label>`).join('')}</div>
     ${missing ? `<div class="status" id="outMissing">⚠ ${t('answersMissingWarn', { n: missing })}</div>` : ''}
@@ -2173,6 +2272,7 @@ async function outputModal() {
         <button class="btn" data-v="${v}" data-k="docx">📝 ${t('word')}</button>
       </td></tr>`).join('')}</table>`;
   $('#outLang', body).value = CL();
+  $('#outTag', body).value = qFilter && qFilter !== 'none' ? qFilter : (qFilter || '');
   const sections = () => {
     const o = {};
     body.querySelectorAll('.outSec').forEach((c) => { o[c.value] = c.checked && !c.disabled; });
@@ -2190,7 +2290,7 @@ async function outputModal() {
       const sc = sections();
       if (!sc.test && !sc.scen && !sc.vocab) return toast(t('nothingToOutput'), 'warn');
       body.querySelectorAll('[data-v]').forEach((x) => { x.disabled = true; });
-      await doOutput(b.dataset.v, b.dataset.k, $('#outLang', body).value, { sections: sc, lang2: sc.scen ? $('#outLang2', body).value : '' });
+      await doOutput(b.dataset.v, b.dataset.k, $('#outLang', body).value, { sections: sc, lang2: sc.scen ? $('#outLang2', body).value : '', tag: $('#outTag', body).value });
       body.querySelectorAll('[data-v]').forEach((x) => { x.disabled = false; });
     };
   });
@@ -2223,6 +2323,8 @@ function settingsForm() {
     <div class="margins">${['top', 'bottom', 'left', 'right'].map((k) => `<label>${t(k)}<input type="number" step="0.1" min="0" max="10" data-m="${k}" value="${s.margins[k]}"></label>`).join('')}</div>
     ${APPINFO.canUpdate ? updSettingsHtml() : ''}
     <div class="verline"><span>${esc(versionText())}</span>${APPINFO.canUpdate ? `<button class="btn primary" id="stUpdNow">🔄 ${t('updCheck')}</button>` : ''}${APPINFO.canPatch ? `<button class="btn" id="stUpd">${t('updLoad')}</button>` : ''}</div>`;
+  if (window.AI) body.appendChild(window.AI.settingsSection());     // Ayarlar > Yapay Zeka (1.9.4)
+  if (window.Ceviri) { const st = window.Ceviri.stats(); const d = document.createElement('p'); d.className = 'hint trstats'; d.textContent = t('trStats', { m: st.memory, d: st.dictionary, a: st.aviation }); body.appendChild(d); }
   if (window.Kullanim) body.appendChild(window.Kullanim.kart());   // Ayarlar > Kullanım Limitleri
   body.appendChild(contactSection());
   if ($('#stUpd', body)) $('#stUpd', body).onclick = updateModal;
@@ -2884,6 +2986,7 @@ function wire() {
   $('#btnTrSel').onclick = () => translateAllModal(exam.questions.some((q) => selected.has(q.id)) ? 'sel' : 'q');
   $('#btnOutput').onclick = outputModal;
   $('#btnSettings').onclick = settingsModal;
+  $('#btnAdvisor').onclick = () => window.AI && window.AI.advisorModal();
   $('#btnCloud').onclick = cloudModal;
   $('#btnUndo').onclick = undo;
   $('#btnFind').onclick = findOpen;
@@ -2894,6 +2997,9 @@ function wire() {
   $('#btnScenTpl').onclick = templateModal;
   $('#btnAutoQ').onclick = () => bankModal('q', 'auto');
   $('#btnArchQ').onclick = () => bankModal('q', 'arch');
+  $('#btnAutoQTop').onclick = () => bankModal('q', 'auto');
+  $('#btnArchQTop').onclick = () => bankModal('q', 'arch');
+  $('#btnAiQTop').onclick = () => bankModal('q', 'ai');
   $('#btnAutoS').onclick = () => bankModal('s', 'auto');
   $('#btnArchS').onclick = () => bankModal('s', 'arch');
   $('#btnAddScen').onclick = () => {
@@ -2922,6 +3028,23 @@ function wire() {
   $('#btnVocabAllOff').onclick = () => vocabSetAll(false);
   $('#btnAddVocab10').onclick = () => addVocab(10);
   $('#btnSelAll').onclick = () => { exam.questions.forEach((q) => selected.add(q.id)); renderList(); };
+  $('#qFilter').onchange = (e) => { qFilter = e.target.value; renderList(); };
+  $('#btnFilterOff').onclick = () => { qFilter = ''; renderList(); };
+  $('#btnSelVis').onclick = () => { selected.clear(); visibleQs().forEach((q) => selected.add(q.id)); renderList(); toast(t('selVisDone', { n: selected.size }), 'ok'); };
+  $('#tagSel').onchange = (e) => {
+    const v = e.target.value; e.target.value = '';
+    if (v === '-') return;
+    const qs = exam.questions.filter((q) => selected.has(q.id));
+    if (!qs.length) return toast(t('ghostNoSel'), 'warn');
+    snap(); qs.forEach((q) => { q.tag = v; }); renderList(); changed();
+    toast(t('tagSetDone', { n: qs.length, l: tagName(v) }), 'ok', [{ label: t('undo'), onClick: () => undo() }]);
+  };
+  $('#btnGhostSel').onclick = () => {
+    const qs = exam.questions.filter((q) => selected.has(q.id));
+    if (!qs.length) return toast(t('ghostNoSel'), 'warn');
+    // seçilenlerin hepsi hayaletse geri getir, değilse hayalet yap
+    setGhost(qs, !qs.every((q) => q.ghost));
+  };
   $('#btnSelNone').onclick = () => { selected.clear(); renderList(); };
   $('#btnDelSel').onclick = deleteSelected;
   $('#btnShuffleQ').onclick = shuffleQuestions;

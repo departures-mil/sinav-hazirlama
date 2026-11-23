@@ -245,5 +245,5 @@
   SE(3, 'Sharing the Sky', 'Integrating unmanned aircraft into shared airspace poses significant challenges. Unlike manned aircraft, UAVs cannot rely on a pilot on board to "see and avoid" other traffic, so detect-and-avoid systems must be certified to an equivalent level of safety.',
     [['What is the main challenge described?', 'Safely integrating unmanned aircraft into shared airspace.'], ['Why are detect-and-avoid systems necessary?', 'Because there is no pilot on board to see and avoid other traffic; the systems must provide an equivalent level of safety.']]);
 
-  window.QBANK_BUILTIN = { v: '2026.11.16', questions, scenarios };
+  window.QBANK_BUILTIN = { v: '2026.11.23', questions, scenarios };
 })();

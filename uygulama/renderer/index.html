@@ -20,6 +20,7 @@
     <button id="btnTemplate" class="tb"><span class="ic">🖼</span><span data-i18n="template"></span></button>
     <button id="btnTranslateAll" class="tb"><span class="ic">🌐</span><span data-i18n="translateAll"></span></button>
     <button id="btnOutput" class="tb primary"><span class="ic">🖨</span><span data-i18n="output"></span></button>
+    <button id="btnAdvisor" class="tb"><span class="ic">🤖</span><span data-i18n="advisor"></span></button>
     <button id="btnSettings" class="tb"><span class="ic">⚙</span><span data-i18n="settings"></span></button>
     <button id="btnCloud" class="tb cloudbtn" data-st="off"><span class="ic">☁</span><span data-i18n="cloud"></span><i class="dot"></i></button>
     <button id="btnUpdate" class="tb updbtn" style="display:none"><span class="ic">🔄</span><span class="lbl"></span><i class="dot"></i></button>
@@ -40,8 +41,12 @@
     <div class="navgrid" id="navGrid"></div>
     <div class="sidetools">
       <div class="sidehead" data-i18n="tools"></div>
+      <label class="sb sbsel">🎯 <span data-i18n="filterLbl"></span> <select id="qFilter"></select></label>
+      <button id="btnSelVis" class="sb" data-i18n="selectVisible"></button>
       <button id="btnSelAll" class="sb" data-i18n="selectAll"></button>
       <button id="btnSelNone" class="sb" data-i18n="selectNone"></button>
+      <label class="sb sbsel">🏷 <span data-i18n="tagAssign"></span> <select id="tagSel"></select></label>
+      <button id="btnGhostSel" class="sb" data-i18n="ghostSel"></button>
       <button id="btnDelSel" class="sb danger" data-i18n="deleteSelected"></button>
       <button id="btnShuffleQ" class="sb" data-i18n="shuffleQuestions"></button>
       <button id="btnShuffleO" class="sb" data-i18n="shuffleAllOptions"></button>
@@ -68,6 +73,8 @@
     </nav>
 
     <div id="testPane">
+      <div class="row autobar top"><button class="btn primary" id="btnAutoQTop" data-i18n="autoQ"></button><button class="btn" id="btnArchQTop" data-i18n="archiveQ"></button><button class="btn" id="btnAiQTop" data-i18n="aiQ"></button></div>
+      <div class="filterbar" id="filterBar" style="display:none"><span id="filterInfo"></span><button class="btn" id="btnFilterOff" data-i18n="filterOff"></button></div>
       <div id="qList"></div>
       <div class="empty" id="emptyMsg" data-i18n="emptyList"></div>
       <button class="addq" id="btnAddQ" data-i18n="addQuestion"></button>
@@ -145,7 +152,12 @@
 <script src="c2-words.js"></script>
 <script src="oxford-words.js"></script>
 <script src="aviation-words.js"></script>
+<script src="sozluk.js"></script>
 <script src="bank-data.js"></script>
+<script src="bank-data2.js"></script>
+<script src="bank-gen.js"></script>
+<script src="ceviri.js"></script>
+<script src="ai.js"></script>
 <script src="bank.js"></script>
 <script src="doc-scan.js"></script>
 <script src="spell.js"></script>
@@ -155,7 +167,7 @@
 <script src="cloud.js"></script>
 <script type="module" src="app.js"></script>
 <script src="duyuru.js"></script>
-<script>Duyuru.baslat({uygulama:'sinav-hazirlama',surum:'1.9.2',dil:function(){return document.documentElement.lang},guncelle:function(){try{window.checkUpdate&&window.checkUpdate(true)}catch(e){}}});</script>
-<script>Kullanim.baslat({uygulama:'sinav-hazirlama',bulut:true,ai:false,haric:['sinav-hazirlama','comm-calc-103111111'],dil:function(){return document.documentElement.lang},proje:function(){try{return Cloud.ready?Cloud.config.projectId:''}catch(e){return ''}}});</script>
+<script>Duyuru.baslat({uygulama:'sinav-hazirlama',surum:'1.9.4',dil:function(){return document.documentElement.lang},guncelle:function(){try{window.checkUpdate&&window.checkUpdate(true)}catch(e){}}});</script>
+<script>Kullanim.baslat({uygulama:'sinav-hazirlama',bulut:true,ai:true,haric:['sinav-hazirlama','comm-calc-103111111'],dil:function(){return document.documentElement.lang},proje:function(){try{return Cloud.ready?Cloud.config.projectId:''}catch(e){return ''}}});</script>
 </body>
 </html>

@@ -40,7 +40,14 @@
     bkGen: ['Sorular hazırlanıyor… {d}/{t}', 'Preparing questions… {d}/{t}', 'جارٍ إعداد الأسئلة… {d}/{t}'],
     bkAdded: ['{n} öğe eklendi.', '{n} items added.', 'تمت إضافة {n} عنصراً.'],
     bkVocabQ: ['"{w}" kelimesinin anlamı nedir?', 'What does "{w}" mean?', 'ما معنى كلمة "{w}"؟'],
-    bkSearch: ['Ara…', 'Search…', 'بحث…'],
+    bkSearch: ['Ara… (soru, seçenek, konu)', 'Search… (question, option, topic)', 'بحث… (سؤال، خيار، موضوع)'],
+    sub_vocab: ['Kelime', 'Vocabulary', 'مفردات'], sub_term: ['Terim', 'Term', 'مصطلح'], sub_synonym: ['Eş anlam', 'Synonym', 'مرادف'], sub_antonym: ['Zıt anlam', 'Antonym', 'ضد'],
+    sub_tense: ['Zaman', 'Tense', 'الأزمنة'], sub_question: ['Soru cümlesi', 'Question form', 'صيغة السؤال'], sub_negative: ['Olumsuz', 'Negative', 'النفي'], sub_passive: ['Edilgen', 'Passive', 'المبني للمجهول'],
+    sub_comparative: ['Karşılaştırma', 'Comparative', 'المقارنة'], sub_superlative: ['En üstünlük', 'Superlative', 'التفضيل'], sub_plural: ['Çoğul', 'Plural', 'الجمع'], sub_article: ['Tanımlık', 'Article', 'أدوات التعريف'],
+    sub_preposition: ['Edat', 'Preposition', 'حروف الجر'], sub_modal: ['Kiplik', 'Modal', 'الأفعال الناقصة'], sub_conditional: ['Koşul', 'Conditional', 'الشرط'], sub_tag: ['Soru eki', 'Question tag', 'الأسئلة الذيلية'],
+    sub_quantity: ['Miktar', 'Quantifier', 'الكمية'], sub_conjunction: ['Bağlaç', 'Conjunction', 'أدوات الربط'], sub_gerund: ['-ing / to', 'Gerund / infinitive', 'المصدر'], sub_relative: ['İlgi cümlesi', 'Relative clause', 'جمل الوصل'],
+    sub_reported: ['Dolaylı anlatım', 'Reported speech', 'الكلام المنقول'], sub_pronoun: ['Zamir', 'Pronoun', 'الضمائر'], sub_be: ['Be fiili', 'Verb "be"', 'فعل be'], sub_adverb: ['Zarf', 'Adverb', 'الظرف'],
+    sub_inversion: ['Devrik yapı', 'Inversion', 'القلب'], sub_collocation: ['Eşdizim', 'Collocation', 'المتلازمات'], sub_phrasal: ['Deyimsel fiil', 'Phrasal verb', 'الأفعال المركبة'],
     bkSource: ['Kaynak', 'Source', 'المصدر'],
     bkSrcAll: ['Hepsi', 'All', 'الكل'],
     bkSrcBank: ['Hazır arşiv', 'Ready archive', 'الأرشيف الجاهز'],
@@ -87,7 +94,10 @@
   // Arşivi yükler: çevrimiçi sürüm varsa onu indirip saklar; yoksa saklanan ya da yerleşik olan
   async function load(force) {
     if (state && !force) return state;
-    const builtin = window.QBANK_BUILTIN;
+    // 1.9.4: yerleşik arşiv = el yazımı (bank-data, bank-data2) + üretilmiş (bank-gen)
+    const b0 = window.QBANK_BUILTIN;
+    const gen = window.QBANK_GEN;
+    const builtin = gen ? { v: String(b0.v) > String(gen.v) ? b0.v : gen.v, questions: b0.questions.concat(gen.questions), scenarios: b0.scenarios } : b0;
     let cache = ls.get(LS_CACHE, null);
     if (!valid(cache)) cache = null;
     let online = false;
@@ -208,7 +218,7 @@
     const pickW = words.slice(0, n);
     const out = [];
     let done = 0;
-    const tr1 = async (w, to) => { try { return ((await window.api.translate({ text: w, from: 'en', to })) || '').trim(); } catch { return ''; } };
+    const tr1 = async (w, to) => { try { return ((window.Ceviri ? await window.Ceviri.translate(w, 'en', to) : await window.api.translate({ text: w, from: 'en', to })) || '').trim(); } catch { return ''; } };
     const queue = pickW.slice();
     const worker = async () => {
       while (queue.length) {
