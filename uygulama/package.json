@@ -1,7 +1,7 @@
 {
   "name": "sinav-hazirlama",
   "productName": "Sinav Hazirlama Sistemi",
-  "version": "1.9.6",
+  "version": "1.9.7",
   "description": "Çoktan seçmeli sınav hazırlama, çeviri ve çıktı uygulaması",
   "main": "boot.js",
   "author": "Milen",
