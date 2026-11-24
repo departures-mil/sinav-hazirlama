@@ -1,9 +1,7 @@
 {
- "version": "1.9.11",
- "minBase": "1.9.0",
- "notes": "Yeni: ✦ Asistan Agent — bütün programlarınızdaki çalışmanızı izler ve daha verimli çalışmanız için öneriler verir (bildirim + program içi panel). Ayarlar'dan açılıp kapatılabilir.",
- "file": "SinavHazirlama-1.9.11.sinavyama",
- "size": 13820781,
- "sha": "89c7835e96aa8ee3bbde2be2ecef8a91a4bff5bbd852802ccb02d6f25909c5f9",
- "publishedAt": "2026-11-24T05:41:13.172Z"
+ "version": "1.10.0 (github.com/departures-mil/sinav-hazirlama/releases/latest)",
+ "minBase": "1.10.0",
+ "notes": "Sınav Hazırlama 1.10.0 yeni kurulum programıyla gelir: https://github.com/departures-mil/sinav-hazirlama/releases/latest → SinavHazirlama-1.10.0-win-setup.exe. Verileriniz korunur.\n- Yeni görünüm (Falcon Ofis): koyu/açık/otomatik tema ve Ayarlar → Görünüm'de renk şeması seçici; eski renkler \"Klasik\" şemasında\n- Artık kurulum programıyla (Setup) gelir; program her açılışta tam ekran açılır; sağ üstte Eşitle, Wi-Fi, Güncelle, tema, dil ve Küçült · Orta · Tam ekran · Kapat\n- Tek tuşla güncelleme GitHub Releases'tan: yalnızca değişen kısımlar indirilir, SHA-256 ile doğrulanır; yüzde, MB, kalan MB ve hız gösterilir\n- Yeni: Wi-Fi eşitleme — aynı modeme bağlı iki bilgisayar PIN ile eşleşir, sınavlar internetsiz eşitlenir\n- Eşitlemede hiçbir sınav silinmez: buluttan \"Sil\" artık arşivler (geri alınabilir), çakışmada eski hâl yedeklenir\n- İlk açılış rehberi (dil, görünüm, kendi Firebase'iniz, kendi yapay zekâ anahtarınız), \"Neler yeni\", yazı boyutu (A− / A+), otomatik hata raporu (kapatılabilir)\n- Ayarlar'ın en sonunda \"Admin ile iletişim\"; Arapça için Noto Sans Arabic yazı tipi\n- Verileriniz (sınavlar, şablon, arşiv, ayarlar, bulut ve yapay zekâ ayarları) aynı yerde kalır",
+ "setup": "https://github.com/departures-mil/sinav-hazirlama/releases/download/v1.10.0/SinavHazirlama-1.10.0-win-setup.exe",
+ "publishedAt": "2026-11-24T09:08:14.876Z"
 }
