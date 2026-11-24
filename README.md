@@ -24,3 +24,8 @@ eşitlenir; **kayıtlar bu depoda bulunmaz**.
 - **Arşiv**: `renderer/sozluk.js` (351 havacılık terimi + ~1400 genel kelime, en/tr/ar), `renderer/bank-gen.js` (sözlük ve dil bilgisi tablolarından ~6100 üretilmiş soru: kelime, terim, eş/zıt anlam, zamanlar, edilgen, edat, kiplik, koşul…), `renderer/bank-data2.js` (90 el yazımı üç dilli İHA sorusu). Arşiv aramasında alt konu etiketleri.
 - **Yapay zeka** (`renderer/ai.js`): Ayarlar > Yapay Zeka'da kullanıcının KENDİ anahtarı (Gemini/OpenAI/Anthropic/OpenRouter/Groq). Üst çubukta "🤖 Danışman" sohbeti (İHA/havacılık, İngilizce öğretimi, sınav tasarımı uzmanı; üç dil). Soru üretme sekmesi (konu + seviye + hedef kitle → üç dilli sorular, arşive kaydedilir). İnternet yokken "çevrimdışı danışman" sözlük ve arşivden yanıt verir. Kullanım, Kullanım Limitleri kartında sayılır.
 - **Çeviri motoru** (`renderer/ceviri.js`): çeviri belleği (cihazda) → sözlük tam eşleşme → çevrimiçi (yapay zeka → Google → MyMemory) → çevrimdışı öbek/kelime çevirisi. Havacılık terimleri sözlükten zorlanır; kelime testi sözlük denetimi çevrimdışı da çalışır.
+
+## 1.9.11
+- ✦ **Asistan Agent** (`renderer/fc-agent.js` = ortak-cekirdek/web/dist/fc-agent.js, `renderer/agent-baslat.js`): bütün programlardaki
+  çalışmayı sayılarla izler (içerik yok), çevrim dışı kurallar + kullanıcının kendi AI anahtarıyla (ai.cfg) öneri; bildirim + sağ altta ✦ panel;
+  Ayarlar'da "Admin İletişim"in önünde kart. Ana süreç `fc-agent-main.js` (%APPDATA%/FalconCekirdek/agent ile diğer programlarla paylaşım).
