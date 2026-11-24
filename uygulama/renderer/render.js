@@ -3,13 +3,18 @@
 (function () {
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-  function optionsHtml(q, model) {
-    const opts = q.options.slice(0, model.optionCount);
+  // 1.10.1: soru / şık görseli
+  const imgTag = (im, cls) => (im && im.src ? `<img class="${cls}" src="${im.src}" alt="">` : '');
+  function optionsHtml(q, model, opts0, letters0) {
+    const opts = (opts0 || q.options).slice(0, model.optionCount);
+    const letters = letters0 || model.letters;
+    const oimg = q.oimg || [];
     const mark = (i) => model.variant === 'teacher' && model.markCorrect && q.correct === i;
     const maxLen = Math.max(...opts.map((o) => (o || '').length));
-    const limit = model.columns > 1 ? 9 : 20;
-    const inline = model.inlineShort && maxLen <= limit && !opts.some((o) => /\n/.test(o || ''));
-    const items = opts.map((o, i) => `<div class="opt${mark(i) ? ' ok' : ''}"><span class="l">${esc(model.letters[i])})</span><span class="t">${esc(o)}${mark(i) ? ' <b class="tick">✓</b>' : ''}</span></div>`).join('');
+    const limit = model.biTest ? 5 : model.columns > 1 ? 9 : 20;
+    const hasImg = oimg.some(Boolean);
+    const inline = model.inlineShort && maxLen <= limit && !opts.some((o) => /\n/.test(o || '')) && (!hasImg || opts.length <= 5);
+    const items = opts.map((o, i) => `<div class="opt${mark(i) ? ' ok' : ''}"><span class="l">${esc(letters[i])})</span><span class="t">${esc(o)}${imgTag(oimg[i], 'oimg')}${mark(i) ? ' <b class="tick">✓</b>' : ''}</span></div>`).join('');
     return `<div class="opts${inline ? ' inline' : ''}" style="${inline ? `grid-template-columns:repeat(${opts.length},1fr)` : ''}">${items}</div>`;
   }
 
@@ -114,7 +119,11 @@
     if (model.variant !== 'key') {
       if (sec.test && model.questions.length) {
         if (multi) body += `<h2 class="part">${esc(L.testPart)}</h2>`;
-        body += `<div class="qs">${model.questions.map((q) => `<div class="q"><div class="stem"><span class="num">${q.n}.</span> ${esc(q.stem)}</div>${optionsHtml(q, model)}</div>`).join('')}</div>`;
+        if (model.biTest) {
+          // iki dil yan yana: her soru bir satır, iki sütun (Arapça sütun sağdan sola)
+          const side = (q, stem, opts, lg, letters) => `<div class="bcol" dir="${dirOf(lg)}" lang="${lg}"><div class="stem"><span class="num">${q.n}.</span> ${esc(stem)}</div>${optionsHtml(q, model, opts, letters)}</div>`;
+          body += `<div class="qs bi">${model.questions.map((q) => `<div class="q"><div class="brow">${side(q, q.stem, q.options, model.lang, model.letters)}${side(q, q.stem2 || '', q.options2 || [], model.lang2, model.letters2 || model.letters)}</div>${q.img ? `<div class="qimgw">${imgTag(q.img, 'qimg')}</div>` : ''}</div>`).join('')}</div>`;
+        } else body += `<div class="qs">${model.questions.map((q) => `<div class="q"><div class="stem"><span class="num">${q.n}.</span> ${esc(q.stem)}</div>${q.img ? `<div class="qimgw">${imgTag(q.img, 'qimg')}</div>` : ''}${optionsHtml(q, model)}</div>`).join('')}</div>`;
       }
       if (sec.scen && model.scenarios.length) {
         const brk = sec.test && model.questions.length ? ' brk' : '';
@@ -134,7 +143,7 @@
       if (multi || (sec.scen && model.scenarios.length)) inner.push(pointsTable(model));
       if (inner.length) key = `<div class="key${model.variant === 'key' ? '' : ' brk'}"><h2>${esc(model.labels.answerKey)}${sub}</h2>${inner.join('')}</div>`;
     }
-    const cols = model.columns > 1 ? model.columns : 1;
+    const cols = model.columns > 1 && !model.biTest ? model.columns : 1;
     return `<!doctype html><html lang="${model.lang}" dir="${dir}"><head><meta charset="utf-8"><title>${esc(model.title)}</title><style>
       html, body { margin: 0; padding: 0; background: transparent; }
       body { font-family: "${model.font}", "Times New Roman", "Traditional Arabic", serif; font-size: ${fs}pt; color: #111; line-height: 1.32; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -158,6 +167,13 @@
       .opt .t { white-space: pre-wrap; flex: 1; }
       .opt.ok { background: #c6efce; font-weight: bold; }
       .tick { color: #1e7b34; }
+      .qimgw { text-align: center; margin: 2pt 0 4pt; }
+      .qimg { max-width: ${cols > 1 ? 90 : 60}%; max-height: 5.5cm; }
+      .oimg { display: block; max-width: 4.2cm; max-height: 2.8cm; margin-top: 2pt; }
+      .opts.inline .oimg { max-width: 100%; }
+      .qs.bi .brow { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8mm; }
+      .qs.bi .bcol + .bcol { border-inline-start: .6pt solid #999; padding-inline-start: 4mm; }
+      .qs.bi .bcol[dir=rtl] { font-family: "Traditional Arabic", "Noto Sans Arabic", "${model.font}", serif; }
 
       .part { text-align: center; font-size: 1.1em; margin: 4pt 0 8pt; padding: 3pt; border-top: 1.2pt solid #333; border-bottom: 1.2pt solid #333; letter-spacing: .05em; }
       .brk { break-before: page; page-break-before: always; }

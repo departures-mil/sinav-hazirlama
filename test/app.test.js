@@ -144,7 +144,7 @@ test('kabuk: sağ üst sıra, Ayarlar (iletişim en son), rehber Firebase + AI a
 });
 
 test('tüm arayüz ve ana süreç dosyaları sözdizimi olarak geçerli; index.html başvuruları var', () => {
-  const files = ['uygulama/main.js', 'uygulama/preload.js', 'uygulama/preview-preload.js', 'uygulama/src/lan.js', 'uygulama/src/template.js', 'uygulama/cekirdek/electron/fc-electron-main.js', 'uygulama/cekirdek/electron/fc-preload.js', 'tools/eski-kanal.js', 'tools/surum.js']
+  const files = ['uygulama/main.js', 'uygulama/preload.js', 'uygulama/src/dizin.js', 'uygulama/src/canli.js', 'uygulama/src/canli-sayfa.js', 'uygulama/preview-preload.js', 'uygulama/src/lan.js', 'uygulama/src/template.js', 'uygulama/cekirdek/electron/fc-electron-main.js', 'uygulama/cekirdek/electron/fc-preload.js', 'tools/eski-kanal.js', 'tools/surum.js']
     .concat(fs.readdirSync(path.join(ROOT, REN)).filter((f) => f.endsWith('.js') && f !== 'app.js').map((f) => REN + f));
   for (const f of files) assert.doesNotThrow(() => new vm.Script(R(f), { filename: f }), f);
   assert.doesNotThrow(() => new vm.Script(R(REN + 'app.js').replace(/import\.meta\.url/g, '""'), { filename: 'app.js' }), 'app.js (modül)');

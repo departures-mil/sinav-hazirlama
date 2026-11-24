@@ -14,8 +14,8 @@ const G = path.join(ROOT, 'guncelleme');
 function uret() {
   const window = { I18N: {} };
   window.window = window;
-  const ctx = vm.createContext({ window, console, localStorage: { getItem: () => null, setItem() {} }, navigator: { language: 'tr' } });
-  for (const f of ['sozluk.js', 'bank-data.js', 'bank-data2.js', 'bank-gen.js']) {
+  const ctx = vm.createContext({ window, console, localStorage: { getItem: () => null, setItem() {} }, navigator: { language: 'tr' }, btoa: (s) => Buffer.from(s, 'binary').toString('base64') });
+  for (const f of ['sozluk.js', 'bank-data.js', 'bank-data2.js', 'bank-gen.js', 'ek-gorsel.js']) {
     vm.runInContext(fs.readFileSync(path.join(R, f), 'utf8'), ctx, { filename: f });
   }
   const b0 = window.QBANK_BUILTIN, gen = window.QBANK_GEN;

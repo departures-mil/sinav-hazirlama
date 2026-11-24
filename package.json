@@ -1,7 +1,7 @@
 {
   "name": "sinav-hazirlama",
   "productName": "Sinav Hazirlama Sistemi",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "Çoktan seçmeli sınav hazırlama, çeviri ve çıktı uygulaması",
   "main": "uygulama/main.js",
   "author": "departures-mil",
@@ -11,7 +11,7 @@
     "surum": "node tools/surum.js",
     "eski-kanal": "node tools/eski-kanal.js",
     "ekran": "node tools/ekran.js",
-    "test": "node --test test/app.test.js test/lan.test.js test/electron-smoke.test.js",
+    "test": "node --test test/app.test.js test/lan.test.js test/omr.test.js test/canli.test.js test/electron-smoke.test.js",
     "test:electron": "node --test test/electron-smoke.test.js",
     "dist": "electron-builder --win nsis --x64 --publish never"
   },
@@ -19,7 +19,8 @@
     "docx-preview": "^0.4.1",
     "jszip": "^3.10.2",
     "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^4.10.38"
+    "pdfjs-dist": "^4.10.38",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "electron": "^33.4.11",

@@ -15,6 +15,9 @@ const { docxToText, decodeText } = require('./src/docx-import');
 const tpl = require('./src/template');
 const { readTable } = require('./src/table-import');
 const { createLan } = require('./src/lan');
+const { createDizin } = require('./src/dizin');
+const { createCanli } = require('./src/canli');
+const canliSayfa = require('./src/canli-sayfa');
 
 let mainWin = null;
 // npm kitaplıkları (pdf.js, jszip, docx-preview) paket kökündeki node_modules klasöründen file:// ile yüklenir
@@ -156,12 +159,13 @@ ipcMain.handle('dlg:save', async (e, opts) => {
   const r = await dialog.showSaveDialog(mainWin, opts);
   return r.canceled ? null : r.filePath;
 });
-ipcMain.handle('exam:read', (e, p) => JSON.parse(fs.readFileSync(p, 'utf8')));
+ipcMain.handle('exam:read', (e, p) => { const d = JSON.parse(fs.readFileSync(p, 'utf8')); try { dizin().noteFile(p, d); } catch { /* yok */ } return d; });
 ipcMain.handle('exam:write', (e, p, data) => {
   // atomik: önce geçici dosya, sonra yeniden adlandırma (yarım yazılmış sınav dosyası olmaz)
   const tmp = p + '.' + process.pid + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(data, null, 1), 'utf8');
   fs.renameSync(tmp, p);
+  try { dizin().noteFile(p, data); } catch { /* yok */ }
   return true;
 });
 ipcMain.handle('autosave:read', () => {
@@ -173,8 +177,64 @@ ipcMain.handle('autosave:write', (e, data) => {
   fs.renameSync(p + '.tmp', p);
   // Wi-Fi eşitleme açıksa (eşleşmiş cihaz varsa) açık sınav eşitleme deposuna da konur
   try { if (lan && data && data.exam && lan.status().pairs.length) lan.put(data.exam); } catch { /* eşitleme deposu sonra */ }
+  try { if (data && data.exam) dizin().noteOpen(data.exam, data.filePath); } catch { /* yok */ }
   return true;
 });
+
+/* ---------------- 1.10.1: genel arama dizini ---------------- */
+let _dizin = null;
+const dizin = () => { if (!_dizin) _dizin = createDizin({ userData: app.getPath('userData') }); return _dizin; };
+ipcMain.handle('dizin:search', (e, q, o) => dizin().search(String(q || ''), o || {}));
+ipcMain.handle('dizin:get', (e, id) => dizin().get(id));
+ipcMain.handle('dizin:rebuild', () => dizin().rebuild());
+
+/* ---------------- 1.10.1: sonuçlar (optik okuma) ---------------- */
+const sonucDir = () => path.join(app.getPath('userData'), 'sonuclar');
+const sonucFile = (id) => path.join(sonucDir(), String(id || 'x').replace(/[^A-Za-z0-9-]/g, '').slice(0, 60) + '.json');
+ipcMain.handle('sonuc:read', (e, examId) => { try { return JSON.parse(fs.readFileSync(sonucFile(examId), 'utf8')); } catch { return null; } });
+ipcMain.handle('sonuc:write', (e, examId, data) => {
+  fs.mkdirSync(path.join(sonucDir(), 'yedek'), { recursive: true });
+  const f = sonucFile(examId);
+  // her yazışta önceki hâl yedeklenir (son 100)
+  if (fs.existsSync(f)) {
+    const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+    fs.copyFileSync(f, path.join(sonucDir(), 'yedek', path.basename(f, '.json') + '-' + stamp + '.json'));
+    const old = fs.readdirSync(path.join(sonucDir(), 'yedek')).sort();
+    old.slice(0, Math.max(0, old.length - 100)).forEach((x) => fs.rmSync(path.join(sonucDir(), 'yedek', x), { force: true }));
+  }
+  fs.writeFileSync(f + '.tmp', JSON.stringify(data), 'utf8');
+  fs.renameSync(f + '.tmp', f);
+  return true;
+});
+
+/* ---------------- 1.10.1: çevrimiçi sınav (aynı ağ) ---------------- */
+let _canli = null;
+const canli = () => {
+  if (!_canli) {
+    _canli = createCanli({
+      dir: path.join(app.getPath('userData'), 'canli-sinav'), pageHtml: canliSayfa.pageHtml, scanHtml: canliSayfa.scanHtml,
+      onChange: (s) => toUi('canli:changed', s),
+      onScan: (id, image) => toUi('canli:scan', { id, image }),
+      log: (m) => console.warn('[canlı]', m),
+    });
+  }
+  return _canli;
+};
+const canliCall = (f) => async (e, ...a) => { try { return { ok: true, data: await f(...a) }; } catch (er) { return { ok: false, error: er.code || er.message || 'ERR' }; } };
+ipcMain.handle('canli:start', canliCall((o) => canli().start(o || {})));
+ipcMain.handle('canli:status', canliCall(() => canli().status()));
+ipcMain.handle('canli:setOpen', canliCall((on) => canli().setOpen(on)));
+ipcMain.handle('canli:allowRe', canliCall((id, re) => canli().allowRe(String(id), !!re)));
+ipcMain.handle('canli:finishAll', canliCall(() => canli().finishAll()));
+ipcMain.handle('canli:stop', canliCall(() => canli().stop()));
+ipcMain.handle('canli:list', canliCall(() => canli().list()));
+ipcMain.handle('canli:get', canliCall((id) => canli().get(String(id))));
+ipcMain.handle('canli:scanResult', (e, id, r) => canli().scanResult(String(id), r));
+// rapor / CSV gibi metin çıktıları (yol kaydetme penceresinden gelir)
+ipcMain.handle('file:writeText', (e, p, text) => { fs.writeFileSync(String(p), String(text), 'utf8'); return true; });
+ipcMain.handle('file:writeBase64', (e, p, b64) => { fs.writeFileSync(String(p), Buffer.from(String(b64), 'base64')); return true; });
+ipcMain.handle('qr:make', async (e, text) => require('qrcode').toDataURL(String(text || ''), { margin: 1, width: 360, errorCorrectionLevel: 'M' }));
+app.on('before-quit', () => { try { if (_canli) _canli.stop(); } catch { /* yok */ } });
 // Eşitlemeden önce yerel hâlin yedeği (bulut ya da Wi-Fi'den gelen sürüm açık sınavın yerine geçmeden önce): son 300 tutulur
 ipcMain.handle('backup:write', (e, kind, data) => {
   const dir = path.join(app.getPath('userData'), 'yedekler', 'esitleme');
@@ -308,8 +368,9 @@ async function renderDocxFallback(docxBuf, info) {
   } finally { w.destroy(); }
 }
 
-async function makePdf({ html, pageNumbers, footerLabel, margins }) {
-  const meta = tpl.getMeta(tplDir());
+async function makePdf({ html, pageNumbers, footerLabel, margins, noTemplate }) {
+  // 1.10.1: optik form gibi kendi düzeni olan sayfalar şablonsuz (A4) basılır
+  const meta = noTemplate ? null : tpl.getMeta(tplDir());
   let widthPt = 595.28, heightPt = 841.89; // A4
   if (meta) { widthPt = meta.widthPt; heightPt = meta.heightPt; }
   const m = {
