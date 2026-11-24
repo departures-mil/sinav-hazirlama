@@ -3,12 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
 <title>Sınav Hazırlama Sistemi</title>
+<script>/* görünüm ve dil ilk boyamadan önce (yanıp sönmesin) */try{var g=function(k){try{return JSON.parse(localStorage.getItem('fc.'+k))}catch(e){return null}},d=document.documentElement,th=g('theme'),sc=g('scheme'),l=g('lang');if(!l){try{l=(JSON.parse(localStorage.getItem('prefs')||'{}')||{}).uiLang}catch(e){}}d.setAttribute('data-scheme',sc||'falcon');if(th==='light'||(th==='auto'&&matchMedia('(prefers-color-scheme: light)').matches))d.classList.add('theme-light');if(l){d.lang=l;d.dir=l==='ar'?'rtl':'ltr'}}catch(e){}</script>
+<link rel="stylesheet" href="cekirdek/css/tokens.css">
+<link rel="stylesheet" href="cekirdek/css/core.css">
 <link rel="stylesheet" href="styles.css">
+<script src="cekirdek/fc-core.js"></script>
+<script src="surum.js"></script>
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><span class="logo">✎</span><div><div class="appname"><span data-i18n="appTitle"></span> <span class="ver" id="appVer"></span></div><div class="filename" id="fileName"></div></div></div>
+  <div class="brand"><span class="logo"><img src="../assets/icon.png" alt=""></span><div><div class="appname"><span data-i18n="appTitle"></span> <span class="ver" id="appVer"></span></div><div class="filename" id="fileName"></div></div></div>
   <div class="group g1">
     <button id="btnNew" class="tb" data-i18n-title="new"><span class="ic">＋</span><span class="lbl" data-i18n="new"></span></button>
     <button id="btnOpen" class="tb" data-i18n-title="open"><span class="ic">📂</span><span class="lbl" data-i18n="open"></span></button>
@@ -30,19 +36,13 @@
   </div>
   <button id="btnCloud" class="tb cloudbtn" data-st="off" data-i18n-title="cloud"><span class="ic">☁</span><span class="lbl" data-i18n="cloud"></span><i class="dot"></i></button>
   <div class="group end">
-    <label class="sel" data-i18n-title="uiLang"><span data-i18n="uiLangShort"></span><select id="uiLang"></select></label>
     <label class="sel" data-i18n-title="contentLang"><span data-i18n="contentLangShort"></span><select id="contentLang"></select></label>
     <span class="vsep"></span>
     <button id="btnFind" class="tb icon" data-i18n-title="findTip">🔍</button>
     <button id="btnUndo" class="tb icon" data-i18n-title="undo">↶</button>
     <span class="vsep"></span>
-    <button id="btnUpdate" class="tb icon updbtn" style="display:none"><span class="ic">⬇</span><span class="lbl"></span><i class="dot"></i></button>
-    <button id="btnSync" class="tb icon" data-i18n-title="syncNow">🔃</button>
-    <span class="vsep"></span>
-    <button id="btnMin" class="tb icon" data-i18n-title="minimize">—</button>
-    <button id="btnFull" class="tb icon" data-i18n-title="halfScreen">❐</button>
-    <button id="btnQuit" class="tb icon danger" data-i18n-title="quit">✕</button>
   </div>
+  <!-- sağ üst: Eşitle · Wi-Fi · Güncelle · tema · dil | Küçült · Orta · Tam ekran · Kapat (ortak çekirdek, kabuk.js) -->
 </header>
 
 <div class="main">
@@ -172,12 +172,8 @@
 <script src="doc-scan.js"></script>
 <script src="spell.js"></script>
 <script src="render.js"></script>
-<script src="update-source.js"></script>
-<script src="kullanim.js"></script>
 <script src="cloud.js"></script>
+<script src="kabuk.js"></script>
 <script type="module" src="app.js"></script>
-<script src="duyuru.js"></script>
-<script>Duyuru.baslat({uygulama:'sinav-hazirlama',surum:'1.9.4',dil:function(){return document.documentElement.lang},guncelle:function(){try{window.checkUpdate&&window.checkUpdate(true)}catch(e){}}});</script>
-<script>Kullanim.baslat({uygulama:'sinav-hazirlama',bulut:true,ai:true,haric:['sinav-hazirlama','comm-calc-103111111'],dil:function(){return document.documentElement.lang},proje:function(){try{return Cloud.ready?Cloud.config.projectId:''}catch(e){return ''}}});</script>
 </body>
 </html>

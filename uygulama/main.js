@@ -1,34 +1,39 @@
 'use strict';
+// Sınav Hazırlama Sistemi — Electron ana süreç.
+// Pencere (her açılışta tam ekran, çerçevesiz), sağ üst pencere düğmeleri, GitHub Releases güncellemesi (yama + tam app.asar)
+// ve ana süreç hata raporu ortak çekirdekten gelir (cekirdek/electron/fc-electron-main.js). Burada uygulamaya özgü IPC kalır.
+// 1.10.0: eski imzalı .sinavyama yama kanalı (boot.js / patcher.js) kaldırıldı; güncelleme yalnız GitHub Releases + latest.json.
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { pathToFileURL } = require('url');
 const { PDFDocument } = require('pdf-lib');
+const fc = require('./cekirdek/electron/fc-electron-main');
 const { buildDocx } = require('./src/docx-builder');
 const { docxToText, decodeText } = require('./src/docx-import');
 const tpl = require('./src/template');
 const { readTable } = require('./src/table-import');
+const { createLan } = require('./src/lan');
 
 let mainWin = null;
-// boot.js'ten açıldıysa yama bilgisi; npm paketleri (pdf.js vb.) her zaman ana paketten
-const BOOT = global.SINAV_BOOT || null;
-const LIB_URL = BOOT ? BOOT.libUrl : pathToFileURL(path.join(__dirname, 'node_modules')).href + '/';
+// npm kitaplıkları (pdf.js, jszip, docx-preview) paket kökündeki node_modules klasöründen file:// ile yüklenir
+const ROOT = path.join(__dirname, '..');
+const LIB_URL = pathToFileURL(path.join(ROOT, 'node_modules')).href + '/';
 const LIB_ARG = '--sinav-lib=' + LIB_URL;
+const SMOKE = !!process.env.SINAV_SMOKE;
 const tplDir = () => path.join(app.getPath('userData'), 'template');
 const autosavePath = () => path.join(app.getPath('userData'), 'autosave.sinav');
 
-if (!process.env.SINAV_TEST && !app.requestSingleInstanceLock()) app.quit();
-app.on('second-instance', () => { if (mainWin) { if (mainWin.isMinimized()) mainWin.restore(); mainWin.focus(); } });
-// Windows bildirimleri (yeni sürüm haberi) için uygulama kimliği
+if (!process.env.SINAV_TEST && !SMOKE && !app.requestSingleInstanceLock()) app.quit();
+app.on('second-instance', () => { if (mainWin) { if (mainWin.isMinimized()) mainWin.restore(); mainWin.show(); mainWin.focus(); } });
+// Windows bildirimleri için uygulama kimliği (eski sürümlerle aynı)
 if (process.platform === 'win32') { try { app.setAppUserModelId('com.milen.sinavhazirlama'); } catch { /* yok */ } }
 
 function createWindow() {
-  mainWin = new BrowserWindow({
-    width: 1400, height: 900,
-    fullscreen: true,
-    show: false,
-    backgroundColor: '#eef1f6',
+  mainWin = new BrowserWindow(fc.windowOptions({
+    width: 1400, height: 900, minWidth: 900, minHeight: 560,
+    backgroundColor: '#070b14',
     icon: path.join(__dirname, 'assets', 'icon.png'),
     title: 'Sınav Hazırlama Sistemi',
     webPreferences: {
@@ -36,22 +41,58 @@ function createWindow() {
       additionalArguments: [LIB_ARG],
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: false,          // preload ortak çekirdeğin fc-preload.js'ini require eder (contextIsolation açık)
       spellcheck: false,
     },
-  });
+  }));
   Menu.setApplicationMenu(null);
+  fc.install(mainWin, { channel: 'win-app' });   // tam ekran açılış, Küçült/Orta/Tam ekran/Kapat, app.asar güncelleme, ana süreç hataları
   mainWin.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  mainWin.once('ready-to-show', () => {
-    mainWin.setFullScreen(true); // her açılışta tam ekran
-    mainWin.show();
-  });
   mainWin.webContents.on('before-input-event', (e, input) => {
     if (input.type !== 'keyDown') return;
     if (input.key === 'F11') { mainWin.setFullScreen(!mainWin.isFullScreen()); e.preventDefault(); }
     if (!app.isPackaged && (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i'))) mainWin.webContents.toggleDevTools();
   });
   if (app.isPackaged) mainWin.webContents.on('devtools-opened', () => mainWin.webContents.closeDevTools());
-  mainWin.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
+  mainWin.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  mainWin.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); if (/^https:\/\//i.test(url)) shell.openExternal(url); } });
+  // Kapat: önce açık sınav diske yazılır (arayüz window.__beforeClose), sonra pencere kapanır
+  let flushed = false;
+  mainWin.on('close', (e) => {
+    if (flushed || SMOKE) return;
+    e.preventDefault();
+    const done = () => { flushed = true; if (!mainWin.isDestroyed()) mainWin.close(); };
+    const t = setTimeout(done, 4000);
+    mainWin.webContents.executeJavaScript('window.__beforeClose ? window.__beforeClose() : true').catch(() => {}).finally(() => { clearTimeout(t); done(); });
+  });
+  if (SMOKE) smoke();
+}
+
+// Electron açılış testi (npm run test:electron): pencere yüklendi mi, çekirdek ve uygulama başladı mı?
+function smoke() {
+  const out = (o) => { process.stdout.write('SINAV_SMOKE ' + JSON.stringify(o) + '\n'); };
+  const consoleErrors = [];
+  mainWin.webContents.on('console-message', (e, level, message) => { if (level >= 3) consoleErrors.push(String(message).slice(0, 300)); });
+  const fail = setTimeout(() => { out({ ok: false, error: 'timeout' }); app.exit(2); }, 60000);
+  mainWin.webContents.on('did-finish-load', () => {
+    setTimeout(async () => {
+      try {
+        const r = await mainWin.webContents.executeJavaScript(`({
+          fc: !!(window.FC && FC.updater && FC.topbar && FC.lanMerge), host: window.FC && FC.host.kind, fcHost: !!window.fcHost, api: !!window.api,
+          version: window.APP_RELEASE && APP_RELEASE.version, scheme: document.documentElement.dataset.scheme, lang: document.documentElement.lang,
+          topbar: !!document.querySelector('.topbar .topbar-actions'), winBtns: document.querySelectorAll('.topbar .win-controls button').length,
+          sync: !!document.querySelector('.topbar .sync-act'), lan: !!document.querySelector('.topbar .lan-act'), update: !!document.querySelector('.topbar .update-act'),
+          kabuk: !!(window.Kabuk && Kabuk.ready), schemes: (FC.look.schemes ? FC.look.schemes() : []),
+          tabs: document.querySelectorAll('.tabs button').length, title: document.title, errors: (window.__shErrors || []).slice(0, 5)
+        })`);
+        r.fullscreen = mainWin.isFullScreen(); r.appVersion = app.getVersion();
+        r.errors = r.errors.concat(consoleErrors.filter((m) => !/net::|Failed to load resource|ERR_|raw\.githubusercontent|github\.com/.test(m)));
+        clearTimeout(fail);
+        out(Object.assign({ ok: r.fc && r.host === 'electron' && r.topbar && r.kabuk && r.tabs === 3 && !r.errors.length }, r));
+        app.exit(0);
+      } catch (e) { out({ ok: false, error: String(e && e.message || e) }); app.exit(3); }
+    }, 3500);
+  });
 }
 
 // Açılışta otomatik kaydın yedeği (son 200 yedek tutulur); sürüm yükseltmelerinde eski veri kaybolmaz
@@ -102,26 +143,9 @@ ipcMain.handle('archive:write', (e, data) => {
   fs.renameSync(f + '.tmp', f);
   return true;
 });
-// 1.9.3: admin iletişimi — e-posta kopyası FormSubmit ile ana süreçten gider (Referer'sız/file:// istek reddedilir)
-ipcMain.handle('contact:mail', async (e, m) => {
-  try {
-    const to = Buffer.from('bW9jLmxpYW1ub3RvcnBANDMyMWxkaW50bWxkYmE=', 'base64').toString().split('').reverse().join('');
-    const body = { _subject: 'Sınav Hazırlama: ' + String(m.konu || 'yeni mesaj'), _template: 'table', _captcha: 'false', Ad: String(m.ad || '-'), Mesaj: String(m.mesaj || '').slice(0, 5000), Konu: String(m.konu || ''), Surum: String(m.surum || ''), Cihaz: String(m.cihaz || ''), Dil: String(m.dil || '') };
-    if (m.donus && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m.donus)) { body.email = m.donus; body._replyto = m.donus; } else if (m.donus) body.Donus = String(m.donus);
-    const r = await fetch('https://formsubmit.co/ajax/' + to, { method: 'POST', body: JSON.stringify(body),
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', Referer: 'https://formsubmit.co/', Origin: 'https://formsubmit.co' } });
-    const j = await r.json().catch(() => ({}));
-    return { ok: r.ok && String(j.success) === 'true' };
-  } catch (err) { return { ok: false }; }
-});
 ipcMain.handle('backup:open', () => { const dir = path.join(app.getPath('userData'), 'yedekler'); fs.mkdirSync(dir, { recursive: true }); return shell.openPath(dir); });
-if (!process.env.SINAV_TEST) app.whenReady().then(() => { backupAutosave(); createWindow(); });
+if (!process.env.SINAV_TEST) app.whenReady().then(() => { backupAutosave(); initLan(); createWindow(); });
 app.on('window-all-closed', () => app.quit());
-
-/* ---------------- window ---------------- */
-ipcMain.handle('win:toggleFullscreen', () => { mainWin.setFullScreen(!mainWin.isFullScreen()); return mainWin.isFullScreen(); });
-ipcMain.handle('win:quit', () => app.quit());
-ipcMain.handle('win:minimize', () => { mainWin.minimize(); });
 
 /* ---------------- dialogs & files ---------------- */
 ipcMain.handle('dlg:open', async (e, opts) => {
@@ -134,7 +158,12 @@ ipcMain.handle('dlg:save', async (e, opts) => {
 });
 ipcMain.handle('exam:read', (e, p) => JSON.parse(fs.readFileSync(p, 'utf8')));
 ipcMain.handle('exam:write', (e, p, data) => {
-  fs.writeFileSync(p, JSON.stringify(data, null, 1), 'utf8'); return true; });
+  // atomik: önce geçici dosya, sonra yeniden adlandırma (yarım yazılmış sınav dosyası olmaz)
+  const tmp = p + '.' + process.pid + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 1), 'utf8');
+  fs.renameSync(tmp, p);
+  return true;
+});
 ipcMain.handle('autosave:read', () => {
   try { return JSON.parse(fs.readFileSync(autosavePath(), 'utf8')); } catch { return null; }
 });
@@ -142,7 +171,22 @@ ipcMain.handle('autosave:write', (e, data) => {
   const p = autosavePath();
   fs.writeFileSync(p + '.tmp', JSON.stringify(data), 'utf8');
   fs.renameSync(p + '.tmp', p);
+  // Wi-Fi eşitleme açıksa (eşleşmiş cihaz varsa) açık sınav eşitleme deposuna da konur
+  try { if (lan && data && data.exam && lan.status().pairs.length) lan.put(data.exam); } catch { /* eşitleme deposu sonra */ }
   return true;
+});
+// Eşitlemeden önce yerel hâlin yedeği (bulut ya da Wi-Fi'den gelen sürüm açık sınavın yerine geçmeden önce): son 300 tutulur
+ipcMain.handle('backup:write', (e, kind, data) => {
+  const dir = path.join(app.getPath('userData'), 'yedekler', 'esitleme');
+  fs.mkdirSync(dir, { recursive: true });
+  const k = String(kind || 'yedek').replace(/[^a-z0-9-]/gi, '').slice(0, 30) || 'yedek';
+  const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+  const f = path.join(dir, `${k}-${stamp}-${Math.random().toString(36).slice(2, 6)}.json`);
+  fs.writeFileSync(f + '.tmp', JSON.stringify(data), 'utf8');
+  fs.renameSync(f + '.tmp', f);
+  const all = fs.readdirSync(dir).filter((x) => x.endsWith('.json')).sort();
+  all.slice(0, Math.max(0, all.length - 300)).forEach((x) => fs.rmSync(path.join(dir, x), { force: true }));
+  return f;
 });
 ipcMain.handle('shell:open', (e, p) => shell.openPath(p));
 ipcMain.handle('shell:showItem', (e, p) => shell.showItemInFolder(p));
@@ -178,45 +222,50 @@ ipcMain.handle('template:setAuto', (e, auto) => tpl.setAuto(tplDir(), auto));
 ipcMain.handle('template:readImages', () => tpl.readImages(tplDir()));
 ipcMain.handle('template:exportRaw', () => tpl.exportRaw(tplDir()));
 ipcMain.handle('template:importRaw', (e, data) => tpl.importRaw(tplDir(), data));
-ipcMain.handle('app:info', () => {
-  if (BOOT) BOOT.started();
-  return {
-    platform: 'desktop', version: BOOT ? BOOT.version : app.getVersion(), baseVersion: app.getVersion(), device: os.hostname(),
-    patch: BOOT && BOOT.patch ? BOOT.patch.version : null, patchNotes: BOOT && BOOT.patch ? BOOT.patch.notes : '',
-    patchDisabled: BOOT ? BOOT.disabled : null, canPatch: !!BOOT, canUpdate: !!BOOT,
-  };
-});
+ipcMain.handle('app:info', () => ({ platform: 'desktop', version: app.getVersion(), device: os.hostname(), packaged: app.isPackaged }));
 /* ---------------- yazım sözlükleri (ana paketteki dict klasörü; yamalarla taşınmaz) ---------------- */
-const DICT_DIR = path.join(BOOT ? BOOT.base : __dirname, 'dict');
+const DICT_DIR = path.join(__dirname, 'dict');
 ipcMain.handle('dict:read', (e, lang) => {
   const rd = (f) => fs.readFileSync(path.join(DICT_DIR, f), 'utf8');
   if (lang === 'en') return { aff: rd('en.aff'), dic: rd('en.dic'), words: rd('en-words.txt') };
   if (lang === 'ar' || lang === 'tr') return { words: rd(lang + '-words.txt') };
   throw new Error('dict');
 });
-/* ---------------- yama (masaüstü güncelleme) ---------------- */
-const patcher = require('./src/patcher');
-const patchErr = (e) => { const m = String(e.message || e); return { ok: false, code: m.split(':')[0], arg: m.split(':').slice(1).join(':') }; };
-ipcMain.handle('patch:inspect', async (e, file) => {
-  if (!BOOT) return { ok: false, code: 'NOBOOT' };
-  try { const p = await patcher.readPatch(fs.readFileSync(file), BOOT); return { ok: true, version: p.manifest.version, minBase: p.manifest.minBase || null, notes: p.manifest.notes || '' }; } catch (er) { return patchErr(er); }
-});
-ipcMain.handle('patch:install', async (e, file) => {
-  if (!BOOT) return { ok: false, code: 'NOBOOT' };
-  try { return { ok: true, ...(await patcher.install(fs.readFileSync(file), BOOT)) }; } catch (er) { return patchErr(er); }
-});
-ipcMain.handle('patch:installData', async (e, b64) => {
-  if (!BOOT) return { ok: false, code: 'NOBOOT' };
-  try { return { ok: true, ...(await patcher.install(Buffer.from(String(b64 || ''), 'base64'), BOOT)) }; } catch (er) { return patchErr(er); }
-});
-ipcMain.handle('patch:remove', () => (BOOT ? patcher.remove(BOOT) : false));
 ipcMain.handle('app:focus', () => { if (mainWin) { if (mainWin.isMinimized()) mainWin.restore(); mainWin.show(); mainWin.focus(); } return true; });
-ipcMain.handle('app:relaunch', () => {
-  // taşınabilir sürüm her açılışta geçici klasöre açılır: yeniden başlatma asıl .exe üzerinden olmalı
-  const exe = process.env.PORTABLE_EXECUTABLE_FILE;
-  app.relaunch(exe ? { execPath: exe } : undefined);
-  app.quit();
-});
+ipcMain.handle('app:relaunch', () => { app.relaunch(); app.quit(); });
+
+/* ---------------- Wi-Fi eşitleme (aynı ağdaki bilgisayarlar, PIN ile eşleşme) ---------------- */
+let lan = null;
+const toUi = (ch, ...a) => { if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send(ch, ...a); };
+function initLan() {
+  try {
+    lan = createLan({
+      dir: path.join(app.getPath('userData'), 'wifi-esitleme'), version: app.getVersion(),
+      onChanged: (ids, peer) => toUi('lan:changed', { ids, peer }),
+      onPaired: (peer) => { lan.setOpen(true).catch(() => {}); toUi('lan:paired', peer); },
+      // karşı taraf eşitlerken bu bilgisayarda açık sınavın son hâli depoya yazılmış olsun
+      beforeServe: () => (mainWin && !mainWin.isDestroyed() ? mainWin.webContents.executeJavaScript('window.__lanFlush ? window.__lanFlush() : true').catch(() => {}) : null),
+      log: (m) => console.warn('[wifi]', m),
+    });
+  } catch (e) { console.error('wifi eşitleme başlatılamadı', e); lan = null; }
+}
+const lanCall = (f) => async (e, ...a) => {
+  if (!lan) return { ok: false, error: 'NO_LAN' };
+  try { return { ok: true, data: await f(...a) }; } catch (er) { return { ok: false, error: er.code || er.message || 'ERR' }; }
+};
+ipcMain.handle('lan:status', lanCall(() => lan.status()));
+ipcMain.handle('lan:setOpen', lanCall((on) => lan.setOpen(!!on)));
+ipcMain.handle('lan:pinShow', lanCall(() => lan.showPin()));
+ipcMain.handle('lan:pinHide', lanCall(() => lan.hidePin()));
+ipcMain.handle('lan:discover', lanCall(() => lan.discover(2500)));
+ipcMain.handle('lan:pair', lanCall(async (o) => { const p = await lan.pair(String(o.host || ''), +o.port || 0, String(o.pin || ''), o.id || ''); await lan.setOpen(true); return p; }));
+ipcMain.handle('lan:unpair', lanCall((id) => lan.unpair(String(id))));
+ipcMain.handle('lan:put', lanCall((exam) => lan.put(exam)));
+ipcMain.handle('lan:list', lanCall(() => lan.summary()));
+ipcMain.handle('lan:get', lanCall((id) => lan.get(String(id))));
+ipcMain.handle('lan:sync', lanCall((peerId) => lan.syncAll(peerId || null)));
+ipcMain.handle('lan:openBackups', lanCall(() => { fs.mkdirSync(lan.conflictDir, { recursive: true }); return shell.openPath(lan.conflictDir); }));
+app.on('before-quit', () => { try { if (lan) lan.stop(); } catch { /* yok */ } });
 ipcMain.handle('template:remove', () => { tpl.remove(tplDir()); return true; });
 
 /* ---------------- PDF output ---------------- */

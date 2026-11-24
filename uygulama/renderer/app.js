@@ -189,6 +189,7 @@ async function openExam() {
   if (!p) return;
   try {
     const data = await api.readExam(p);
+    await keepLocal('acmadan-once');
     snap();
     exam = normalizeExam(data);
     filePath = p; dirty = false;
@@ -208,6 +209,12 @@ async function newExamAction() {
   renderAll(); changed();
 }
 
+// Açık sınavın yerine başkası gelmeden önce, kaydedilmemiş içerik varsa yerel yedeği alınır (veri asla kaybolmaz)
+const examHasContent = (x) => !!(x && (x.questions.length || x.scenarios.length || x.vocab.items.some((it) => (it.term || '').trim()) || LK.some((k) => (x.title[k] || '').trim())));
+async function keepLocal(kind) {
+  try { if (api.backupWrite && examHasContent(exam) && (dirty || !filePath)) await api.backupWrite(kind, { app: 'sinav-hazirlama', savedAt: new Date().toISOString(), filePath, exam }); } catch { /* yedek alınamazsa devam */ }
+}
+
 /* ------------------------------------------------------------------ arayüz dili */
 function fillLangSelect(sel, value) {
   sel.innerHTML = LK.map((k) => `<option value="${k}">${window.LANGS[k]}</option>`).join('');
@@ -220,7 +227,7 @@ function applyUiLang() {
   document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll('[data-i18n-ph]').forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
   document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); });
-  fillLangSelect($('#uiLang'), prefs.uiLang);
+  if ($('#uiLang')) fillLangSelect($('#uiLang'), prefs.uiLang);
   fillLangSelect($('#contentLang'), prefs.contentLang);
   updateFileName();
 }
@@ -2429,15 +2436,12 @@ function settingsForm() {
     <label class="f" style="max-width:420px"><span>${t('scenLines')}</span><input type="number" id="stScenLines" min="0" max="30"></label>
     <div style="margin-top:12px;font-size:13px;color:var(--muted)">${t('pageMargins')}</div>
     <div class="margins">${['top', 'bottom', 'left', 'right'].map((k) => `<label>${t(k)}<input type="number" step="0.1" min="0" max="10" data-m="${k}" value="${s.margins[k]}"></label>`).join('')}</div>
-    ${APPINFO.canUpdate ? updSettingsHtml() : ''}
-    <div class="verline"><span>${esc(versionText())}</span>${APPINFO.canUpdate ? `<button class="btn primary" id="stUpdNow">🔄 ${t('updCheck')}</button>` : ''}${APPINFO.canPatch ? `<button class="btn" id="stUpd">${t('updLoad')}</button>` : ''}</div>`;
+`;
   const tagEd = tagEditor(); body.appendChild(tagEd.box);           // Ayarlar > Soru seviye etiketleri (1.9.9)
   if (window.AI) body.appendChild(window.AI.settingsSection());     // Ayarlar > Yapay Zeka (1.9.4)
   if (window.Ceviri) { const st = window.Ceviri.stats(); const d = document.createElement('p'); d.className = 'hint trstats'; d.textContent = t('trStats', { m: st.memory, d: st.dictionary, a: st.aviation }); body.appendChild(d); }
-  if (window.Kullanim) body.appendChild(window.Kullanim.kart());   // Ayarlar > Kullanım Limitleri
-  body.appendChild(contactSection());
-  if ($('#stUpd', body)) $('#stUpd', body).onclick = updateModal;
-  if ($('#stUpdNow', body)) $('#stUpdNow', body).onclick = runUpdate;
+  // 1.10.0: Görünüm, Eşitleme, Kullanım Limitleri, hata raporu, Hakkında ve EN SONDA "Admin ile iletişim" ortak çekirdekten (kabuk.js)
+  if (window.Kabuk) body.appendChild(window.Kabuk.settingsGrid());
   $('#stOpt', body).value = String(s.optionCount);
   $('#stCols', body).value = String(s.columns);
   $('#stFont', body).value = s.font;
@@ -2448,7 +2452,6 @@ function settingsForm() {
   $('#stKey', body).checked = s.keyAtEnd;
   $('#stPage', body).checked = s.pageNumbers;
   $('#stSync', body).checked = prefs.syncLang;
-  if (APPINFO.canUpdate) updSettingsFill(body);
   $('#stScenPage', body).checked = s.scenNewPage;
   $('#stScenLines', body).value = s.scenLines;
   const warnE = () => {
@@ -2471,7 +2474,6 @@ function settingsForm() {
     s.scenNewPage = $('#stScenPage', body).checked;
     s.scenLines = Math.max(0, Math.min(30, parseInt($('#stScenLines', body).value, 10) || 0));
     prefs.syncLang = $('#stSync', body).checked;
-    if (APPINFO.canUpdate) updSettingsRead(body);
     tagEd.apply();
     savePrefs();
   };
@@ -2548,76 +2550,24 @@ function tagEditor() {
 }
 
 /* ------------------------------------------------------------------ admin iletişim */
-// Öneri ve talepler yöneticiye iletilir. Alıcı adres programda yer almaz: mesaj güncelleme projesine yazılır,
-// yöneticinin aktarım betiği oradan alıp yöneticiye e-posta olarak gönderir. Gönderilemeyen mesaj saklanır, sonra yeniden denenir.
+// 1.10.0: "Admin ile iletişim" ortak çekirdeğin kartıdır (FC.contact, Ayarlar'ın en sonunda). Eski sürümün kuyrukta kalan
+// mesajları bir kez çekirdeğin kuyruğuna aktarılır.
 const CONTACT_Q = 'contact.outbox';
-const contactTopics = ['contactTopicIdea', 'contactTopicReq', 'contactTopicBug', 'contactTopicOther'];
-function contactPayload(f) {
-  return {
-    konu: f.topic, ad: f.name, donus: f.reply, mesaj: f.text,
-    surum: APPINFO.version || '', platform: MOBILE ? 'android' : 'masaustu', cihaz: deviceName, dil: prefs.uiLang || 'tr',
-    zaman: new Date().toISOString(),
-  };
-}
 async function contactFlush() {
   const q = CL0.store.get(CONTACT_Q) || [];
-  if (!q.length) return 0;
+  if (!q.length || !window.FC || !FC.contact) return 0;
   const left = [];
-  let sent = 0;
   for (const m of q) {
-    try { await CL0.sendContact(m); sent++; } catch { left.push(m); }
+    try { await FC.contact.send({ tur: /hata|bug/i.test(m.konu || '') ? 'hata' : 'oneri', mesaj: [m.konu, m.ad, m.mesaj].filter(Boolean).join(' · '), iletisim: m.donus || '' }); } catch { left.push(m); }
   }
   CL0.store.set(CONTACT_Q, left.length ? left : null);
-  return sent;
-}
-function contactSection() {
-  const box = document.createElement('section');
-  box.className = 'contactbox';
-  box.innerHTML = `
-    <h4>✉ ${esc(t('contactTitle'))}</h4>
-    <p class="contactlead">${esc(t('contactLead'))}</p>
-    <div class="setgrid">
-      <label class="f"><span>${esc(t('contactName'))}</span><input class="in" id="ctName" type="text" maxlength="100" dir="auto"></label>
-      <label class="f"><span>${esc(t('contactReply'))}</span><input class="in" id="ctReply" type="text" maxlength="150" dir="auto"></label>
-      <label class="f"><span>${esc(t('contactTopic'))}</span><select class="in" id="ctTopic">${contactTopics.map((k) => `<option value="${k}">${esc(t(k))}</option>`).join('')}</select></label>
-    </div>
-    <label class="f"><span>${esc(t('contactMsg'))}</span><textarea class="in" id="ctText" rows="5" maxlength="4000" dir="auto" placeholder="${esc(t('contactMsgPh'))}"></textarea></label>
-    <div class="contactfoot"><span class="hint" id="ctInfo">${esc(t('contactPrivacy'))}</span><button class="btn primary" id="ctSend">${esc(t('contactSend'))}</button></div>`;
-  // telefonda ayar kartı her değişiklikte ayarları uygular; bu bölümün alanları ayar değildir
-  ['change', 'input'].forEach((ev) => box.addEventListener(ev, (e) => e.stopPropagation()));
-  const info = $('#ctInfo', box);
-  const say = (msg, cls) => { info.textContent = msg; info.className = 'hint ' + (cls || ''); };
-  $('#ctSend', box).onclick = async () => {
-    const text = $('#ctText', box).value.trim();
-    if (text.length < 10) { say(t('contactTooShort'), 'err'); $('#ctText', box).focus(); return; }
-    const last = CL0.store.get('contact.last') || 0;
-    if (Date.now() - last < 60000) { say(t('contactWait'), 'err'); return; }
-    const m = contactPayload({
-      topic: window.I18N[$('#ctTopic', box).value][0], name: $('#ctName', box).value.trim(), reply: $('#ctReply', box).value.trim(), text,
-    });
-    const btn = $('#ctSend', box);
-    btn.disabled = true; say(t('contactSending'));
-    try {
-      await CL0.sendContact(m);
-      say(t('contactSent'), 'ok');
-      toast(t('contactSent'), 'ok');
-      contactFlush().catch(() => {});
-    } catch (e) {
-      const q = CL0.store.get(CONTACT_Q) || [];
-      q.push(m); CL0.store.set(CONTACT_Q, q.slice(-20));
-      say(t('contactQueued'), 'warn');
-    }
-    CL0.store.set('contact.last', Date.now());
-    $('#ctText', box).value = '';
-    btn.disabled = false;
-  };
-  return box;
+  return q.length - left.length;
 }
 function settingsModal() {
   if (MOBILE) { renderSettingsInline(); $('#settingsCard').scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
   const { body, apply } = settingsForm();
   modal({
-    title: t('settingsTitle'), body,
+    title: t('settingsTitle'), body, wide: true,
     buttons: [{ label: t('cancel'), onClick: (c) => c() }, {
       label: t('ok'), cls: 'primary', onClick: (c) => { apply(); renderAll(); changed(); c(); },
     }],
@@ -2643,158 +2593,24 @@ function renderSettingsInline() {
 const CL0 = window.Cloud;
 let deviceName = MOBILE ? 'Telefon' : 'Bilgisayar';
 let APPINFO = {};
-const versionText = () => APPINFO.version ? `${t('version')} ${APPINFO.version}${APPINFO.patch ? ` (${t('updPatched', { b: APPINFO.baseVersion })})` : ''}` : '';
+const versionText = () => APPINFO.version ? `${t('version')} ${APPINFO.version}` : '';
 
-/* ------------------------------------------------------------------ masaüstü yama (güncelleme) */
-const updErr = (r) => (window.I18N['updErr_' + r.code] ? t('updErr_' + r.code, { v: r.arg }) : t('updFail') + ' (' + r.code + ')');
-async function updateModal() {
-  if (!APPINFO.canPatch) return;
-  const body = document.createElement('div');
-  body.innerHTML = `<p style="margin:0 0 8px"><b>${esc(versionText())}</b></p>
-    <p class="hint">${t('updHint')}</p>
-    <div id="updInfo"></div>`;
-  const m = modal({
-    title: t('updTitle'), body,
-    buttons: [
-      ...(APPINFO.patch ? [{ label: t('updRemove'), cls: 'danger', onClick: async (c) => {
-        if (!(await confirmBox(t('updRemoveAsk', { b: APPINFO.baseVersion })))) return;
-        await api.removePatch(); c(); askRelaunch(t('updRemoved', { b: APPINFO.baseVersion }));
-      } }] : []),
-      { label: t('cancel'), onClick: (c) => c() },
-      { label: t('updPick'), cls: 'primary', onClick: async (c) => {
-        const f = await api.openDialog({ title: t('updTitle'), filters: [{ name: t('updFile'), extensions: ['sinavyama'] }] });
-        if (!f) return;
-        const info = await api.inspectPatch(f);
-        if (!info.ok) { $('#updInfo', body).innerHTML = `<div class="status err">⛔ ${esc(updErr(info))}</div>`; return; }
-        if (!(await confirmBox(t('updAsk', { v: info.version }) + (info.notes ? '\n\n' + info.notes : '')))) return;
-        const r = await api.installPatch(f);
-        if (!r.ok) { $('#updInfo', body).innerHTML = `<div class="status err">⛔ ${esc(updErr(r))}</div>`; return; }
-        c(); askRelaunch(t('updDone', { v: r.version }));
-      } },
-    ],
+/* ------------------------------------------------------------------ güncelleme */
+// 1.10.0: tek tuşla güncelleme ortak çekirdekte (FC.updater): GitHub Releases → latest.json; önce yalnız değişen kısımlar
+// (FCD1 yama), olmazsa tam app.asar; SHA-256 doğrulaması, yüzde / MB / kalan MB / hız. Eski .sinavyama kanalı kaldırıldı.
+function runUpdate() { if (window.FC && FC.updater) return FC.updater.run().catch(() => {}); return null; }
+function checkUpdate(manual) {
+  if (!window.FC || !FC.updater) return Promise.resolve(null);
+  return FC.updater.check().then((p) => {
+    if (manual) toast(p ? FC.t('fc.update.avail', { v: p.version }) : FC.t('fc.update.none', { v: APPINFO.version || '' }), p ? 'ok' : '');
+    return p;
   });
-  m.el.querySelector('.modal').style.width = 'min(560px, 92vw)';
 }
-/* ------------------------------------------------------------------ tek tıkla güncelleme (Firebase) */
-// Yayıncı yeni sürümü updates/{kanal} belgesine koyar; düğmeye basınca indirilir, imzası denetlenir, kurulur ve program yeniden başlar.
-const UPD_CH = MOBILE ? 'android' : 'desktop';
-const cmpVer = (a, b) => {
-  const x = String(a || '0').split('.').map((n) => parseInt(n, 10) || 0), y = String(b || '0').split('.').map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d < 0 ? -1 : 1; }
-  return 0;
-};
-let updHead = null, updBusy = false;
-const updNewer = (h) => !!(h && !h.disabled && cmpVer(h.version, APPINFO.version) > 0);
-// telefonda yeni dosyalar uygulamanın yerel (Java) sürümüyle uyumlu olmalı; masaüstünde ana kurulum yeterince yeni olmalı
-const updFits = (h) => (MOBILE ? (+h.minNative || 0) <= (+APPINFO.nativeLevel || 0) : !h.minBase || cmpVer(APPINFO.baseVersion || APPINFO.version, h.minBase) >= 0);
-function renderUpdBtn() {
-  const b = $('#btnUpdate');
-  if (!b) return;
-  b.style.display = APPINFO.canUpdate ? '' : 'none';
-  b.classList.toggle('has', !!updHead);
-  $('.lbl', b).textContent = updHead ? updHead.version : '';
-  b.title = updHead ? t('updNowTip', { v: updHead.version }) : t('updCheckTip');
-}
-async function checkUpdate(manual) {
-  if (!APPINFO.canUpdate) return null;
-  if (!CL0.updateReady) {
-    if (manual) toast(t('updNoCloud'), 'warn', [{ label: t('cloud'), onClick: () => cloudModal() }], 9000);
-    return null;
-  }
-  try {
-    const h = await CL0.updateHead(UPD_CH);
-    updHead = updNewer(h) && updFits(h) ? h : null;
-    if (!manual && updHead) updNotify(updHead);
-    if (!manual && !updHead && updNewer(h) && !updFits(h) && updNotified !== 'full-' + h.version) { updNotified = 'full-' + h.version; toast('🔔 ' + t(MOBILE ? 'updNeedApk' : 'updNeedFull', { v: h.version }), 'warn', [], 15000); }
-    if (manual && updNewer(h) && !updFits(h)) toast(t(MOBILE ? 'updNeedApk' : 'updNeedFull', { v: h.version }), 'warn', [], 15000);
-    else if (manual && !updHead) toast(t('updLatest', { v: APPINFO.version }), 'ok');
-  } catch (e) {
-    if (manual) toast(t('updFail') + ' ' + cloudMsg(e), 'err', [], 9000);
-  }
-  renderUpdBtn();
-  return updHead;
-}
-/* yeni sürüm bildirimi (Ayarlar → Güncelleme bildirimleri) */
-// prefs.updAtStart: program her açıldığında yeni sürüme bakılır; varsa bildirim gösterilir.
-// Aynı sürüm için bir oturumda bir kez haber verilir.
-let updNotified = '', updToastEl = null;
-// 1.8.0: güncelleme denetimi açılışta her zaman yapılır (ayar kaldırıldı)
-function updSettingsHtml() { return ''; }
-function updSettingsFill() { /* yok */ }
-function updSettingsRead() { /* yok */ }
-function updNotify(h) {
-  if (!h || updNotified === h.version || updBusy) return;
-  updNotified = h.version;
-  if (updToastEl) updToastEl.remove();
-  const msg = t('updAvail', { v: h.version }) + (h.notes ? ' — ' + String(h.notes).split('\n')[0].slice(0, 140) : '');
-  updToastEl = toast('🔔 ' + msg, 'ok', [
-    { label: t('updNowBtn'), onClick: () => { if (updToastEl) updToastEl.remove(); updToastEl = null; runUpdate(); } },
-    { label: t('updLater'), onClick: () => { if (updToastEl) updToastEl.remove(); updToastEl = null; } },
-  ], 15000); // 30 sn görünür; üstteki "Güncelle → sürüm" düğmesi vurgulu kalır
-  // masaüstünde sistem bildirimi de gösterilir (program arkadayken de görülsün)
-  if (!MOBILE && typeof Notification !== 'undefined') {
-    try {
-      const n = new Notification(t('updNotifyHead'), { body: msg, silent: false });
-      n.onclick = () => { try { if (api.focusWin) api.focusWin(); else window.focus(); } catch { /* yok */ } };
-    } catch { /* bildirim desteklenmiyor */ }
-  }
-}
-async function sha256Hex(bytes) {
-  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
-  return [...d].map((x) => x.toString(16).padStart(2, '0')).join('');
-}
-// Tek tık: varsa yeni sürümü indirir, kurar ve programı yeniden başlatır
-async function runUpdate() {
-  if (updBusy) return;
-  const h = updHead || await checkUpdate(true);
-  if (!h) return;
-  updBusy = true;
-  const btn = $('#btnUpdate');
-  btn.disabled = true;
-  const m = modal({
-    title: t('updTitle'),
-    body: `<p style="margin:0 0 8px"><b>${esc(t('updGetting', { v: h.version }))}</b></p>${h.notes ? `<p class="hint" style="white-space:pre-line">${esc(h.notes)}</p>` : ''}
-      <div class="progress"><div></div></div><p class="hint" id="updSt">${esc(t('updDownloading'))}</p>`,
-  });
-  m.el.querySelector('.x').style.display = 'none';
-  m.el.querySelector('.modal').style.width = 'min(520px, 92vw)';
-  const bar = m.el.querySelector('.progress div');
-  const st = (k) => { m.el.querySelector('#updSt').textContent = t(k); };
-  try {
-    const mbf = (x) => (x / 1048576).toFixed(1).replace('.', window.UI_LANG === 'en' ? '.' : ',');
-    const b64 = await CL0.getUpdate(UPD_CH, h, (d, n, sp) => {
-      bar.style.width = Math.round(80 * d / n) + '%';
-      const el = m.el.querySelector('#updSt');
-      if (el) el.textContent = `%${Math.round(100 * d / n)} — ${mbf(d)} / ${mbf(n)} MB · ${mbf(n - d)} MB · ${sp >= 1048576 ? mbf(sp) + ' MB/s' : Math.round(sp / 1024) + ' KB/s'}`;
-    });
-    if (h.sha) {
-      const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      if (await sha256Hex(bytes) !== h.sha) throw Object.assign(new Error('BADHASH'), { upd: { code: 'BADHASH', arg: '' } });
-    }
-    st('updInstalling'); bar.style.width = '90%';
-    const r = MOBILE ? await api.installOta(b64) : await api.installPatchData(b64);
-    if (!r || !r.ok) throw Object.assign(new Error((r && r.code) || 'FAIL'), { upd: r || { code: 'FAIL' } });
-    st('updRestarting'); bar.style.width = '100%';
-    // açık sınav kaydedilir (ve buluta gönderilir), sonra program yeni sürümle yeniden açılır
-    clearTimeout(saveTimer);
-    await api.writeAutosave({ exam, filePath, dirty });
-    if (CL0.ready && syncRec(exam.id).dirty) { try { await cloudPush(); } catch { /* sonra gönderilir */ } }
-    setTimeout(() => api.relaunch(), 700);
-  } catch (e) {
-    m.close();
-    toast(e.upd ? updErr(e.upd) : t('updFail') + ' ' + cloudMsg(e), 'err', [], 12000);
-    updBusy = false;
-    btn.disabled = false;
-  }
-}
-async function askRelaunch(msg) {
-  if (await confirmBox(msg + ' ' + t('updRestartAsk'))) {
-    clearTimeout(saveTimer);
-    await api.writeAutosave({ exam, filePath, dirty });
-    api.relaunch();
-  }
+// güncelleme kurulmadan hemen önce açık sınav diske yazılır
+async function flushForUpdate() {
+  clearTimeout(saveTimer);
+  await api.writeAutosave({ exam, filePath, dirty });
+  if (CL0.ready && syncRec(exam.id).dirty) { try { await cloudPush(); } catch { /* sonra gönderilir */ } }
 }
 let cloudState = 'off';
 let cloudBusy = false;
@@ -2814,6 +2630,7 @@ const cloudMsg = (e) => (e && e.code && window.I18N['cloudErr_' + e.code] ? t('c
 
 function setCloudState(st, err) {
   cloudState = CL0.ready ? st : 'off';
+  if (window.Kabuk) window.Kabuk.cloudState(cloudState, err && err.code === 'OFFLINE');
   const b = $('#btnCloud');
   if (!b) return;
   b.dataset.st = cloudState;
@@ -2875,6 +2692,7 @@ async function cloudPush(force, attempt = 0) {
   if (retry) return cloudPush(true, attempt + 1);
   if (ex === exam && syncRec(id).dirty && cloudAuto() && cloudState === 'ok') cloudDirty();
 }
+let cloudArchivedNote = '';
 // Buluttaki yeni sürümleri alır (önce şablon, sonra açık sınav)
 async function cloudPull() {
   if (!CL0.ready || cloudBusy) return;
@@ -2890,6 +2708,7 @@ async function cloudPull() {
       if (!rec.dirty) {
         const r = await CL0.getExam(id);
         if (r && exam.id === id) {
+          await keepLocal('bulut-once');
           snap();
           const keepPath = filePath;
           exam = normalizeExam(r.exam);
@@ -2901,6 +2720,9 @@ async function cloudPull() {
           toast(t('cloudPulled', { d: head.device || '?' }), 'ok');
         }
       } else pushNeeded = true;
+    } else if (head && head.deleted && !rec.dirty) {
+      // başka cihazda arşivlendi: açık kopya burada kalır, buluta geri gönderilmez (düzenlenirse yeniden canlanır)
+      if (cloudArchivedNote !== id) { cloudArchivedNote = id; toast(t('cloudArchivedElsewhere'), 'warn', [], 9000); }
     } else if (!head || head.deleted || rec.dirty || !rec.rev) pushNeeded = cloudAuto();
     setCloudState('ok');
   } catch (e) {
@@ -2976,6 +2798,7 @@ async function openCloudExam(id) {
   if (CL0.ready && syncRec(exam.id).dirty) await cloudPush(true);
   const r = await CL0.getExam(id);
   if (!r) return;
+  await keepLocal('acmadan-once');
   snap();
   exam = normalizeExam(r.exam);
   exam.id = id;
@@ -3053,6 +2876,7 @@ function cloudModal() {
       <div class="status" id="clErr" style="display:none"></div>
       <h4>${esc(t('cloudExams'))}</h4>
       <div id="clList" class="cllist">…</div>
+      <div id="clArch" class="cllist"></div>
       <h4>${esc(t('cloudCode'))}</h4>
       <p class="help">${esc(t('cloudCodeHint'))}</p>
       <div class="row"><input type="text" id="clCode" dir="ltr" readonly value="${esc(CL0.shareCode())}"><button class="btn" id="clCopy">${esc(t('copy'))}</button></div>
@@ -3081,8 +2905,20 @@ function cloudModal() {
     if (!box) return;
     let list;
     try { list = await CL0.listExams(); } catch (e) { box.textContent = ''; err(e); return; }
-    if (!list.length) { box.innerHTML = `<div class="empty">${esc(t('cloudEmptyList'))}</div>`; return; }
-    const fmt = (ms) => { try { return new Date(ms).toLocaleString(prefs.uiLang === 'ar' ? 'ar' : prefs.uiLang); } catch { return ''; } };
+    const fmt = (ms) => { try { return new Date(ms).toLocaleString(prefs.uiLang === 'ar' ? 'ar-u-nu-latn' : prefs.uiLang); } catch { return ''; } };
+    const drawArch = async () => {
+      const ab = $('#clArch', body);
+      if (!ab) return;
+      let arch = [];
+      try { arch = await CL0.listArchived(); } catch { arch = []; }
+      ab.innerHTML = arch.length ? `<h4>${esc(t('cloudArchived'))} (${arch.length})</h4><p class="help">${esc(t('cloudArchivedHint'))}</p>` + arch.map((d) => `
+        <div class="clrow arch"><div class="cltxt"><b dir="auto">${esc(d.name || t('untitled'))}</b><small>${esc(d.info || '')} · ${esc(d.device || '')} · ${esc(fmt(d.deletedAt || d.updatedAt))}</small></div>
+          <div class="clbtn"><button class="btn" data-restore="${d._id}">${esc(t('cloudRestore'))}</button></div></div>`).join('') : '';
+      ab.querySelectorAll('[data-restore]').forEach((b) => {
+        b.onclick = async () => { try { await CL0.restoreExam(b.dataset.restore); await drawList(); } catch (e) { err(e); } };
+      });
+    };
+    if (!list.length) { box.innerHTML = `<div class="empty">${esc(t('cloudEmptyList'))}</div>`; await drawArch(); return; }
     box.innerHTML = list.map((d) => `
       <div class="clrow ${d._id === exam.id ? 'cur' : ''}">
         <div class="cltxt"><b dir="auto">${esc(d.name || t('untitled'))}</b>${d._id === exam.id ? ` <em>(${esc(t('cloudCurrent'))})</em>` : ''}
@@ -3102,11 +2938,11 @@ function cloudModal() {
         if (!(await confirmBox(t('cloudConfirmDelete', { n: d.name || t('untitled') })))) return;
         try {
           await CL0.deleteExam(d._id);
-          if (d._id === exam.id) setSyncRec(exam.id, null);
           await drawList();
         } catch (e) { err(e); }
       };
     });
+    await drawArch();
   };
   m = modal({ title: t('cloudTitle'), body, wide: true, buttons: [{ label: t('close'), cls: 'primary', onClick: (c) => c() }] });
   draw();
@@ -3167,11 +3003,9 @@ function wire() {
   $('#btnOutput').onclick = outputModal;
   $('#btnSettings').onclick = settingsModal;
   $('#btnAdvisor').onclick = () => window.AI && window.AI.advisorModal();
-  $('#btnCloud').onclick = cloudModal;
+  if ($('#btnCloud')) $('#btnCloud').onclick = cloudModal;
   $('#btnUndo').onclick = undo;
   $('#btnFind').onclick = findOpen;
-  $('#btnFull').onclick = () => api.toggleFullscreen();
-  if ($('#btnMin')) $('#btnMin').onclick = () => { if (api.minimize) api.minimize(); };
   // Kaydet ▾ açılır menüsü (Farklı Kaydet)
   const sp = $('#btnSaveMore') && $('#btnSaveMore').closest('.split');
   if (sp) {
@@ -3179,13 +3013,6 @@ function wire() {
     document.addEventListener('click', (e) => { if (!sp.contains(e.target)) sp.classList.remove('open'); });
     $('#saveMenu', sp).addEventListener('click', () => sp.classList.remove('open'));
   }
-  if ($('#btnSync')) $('#btnSync').onclick = async () => {
-    if (!CL0.ready || !CL0.user) return cloudModal();
-    const b = $('#btnSync'); b.disabled = true; b.classList.add('spin');
-    try { await cloudPull(); if (syncRec(exam.id).dirty) await cloudPush(true); toast(t('cloudSynced'), 'ok'); } catch (e) { toast(t('error') + ': ' + e.message, 'warn'); }
-    b.disabled = false; b.classList.remove('spin');
-  };
-  $('#btnQuit').onclick = async () => { await api.writeAutosave({ exam, filePath, dirty }); api.quit(); };
   $('#btnAddQ').onclick = () => { snap(); const q = newQuestion(); exam.questions.push(q); renderList(); changed(); scrollToQ(q.id, true); };
   document.querySelectorAll('.tabs button').forEach((b) => { b.onclick = () => setTab(b.dataset.tab); });
   $('#btnScenTpl').onclick = templateModal;
@@ -3215,7 +3042,6 @@ function wire() {
   $('#btnVocabCheck').onclick = vocabCheck;
   $('#btnVocabDedupe').onclick = vocabDedupe;
   $('#btnVocabAllOn').onclick = () => vocabSetAll(true);
-  $('#btnUpdate').onclick = runUpdate;
   $('#btnVocabFill').onclick = vocabFillEmpty;
   $('#vcAr').onchange = (e) => vocabSetCol('ar', e.target.checked);
   $('#vcTr').onchange = (e) => vocabSetCol('tr', e.target.checked);
@@ -3243,11 +3069,7 @@ function wire() {
   $('#btnDelSel').onclick = deleteSelected;
   $('#btnShuffleQ').onclick = shuffleQuestions;
   $('#btnShuffleO').onclick = shuffleAllOptions;
-  $('#uiLang').onchange = (e) => {
-    prefs.uiLang = e.target.value;
-    if (prefs.syncLang) prefs.contentLang = e.target.value;
-    savePrefs(); renderAll();
-  };
+  if ($('#uiLang')) $('#uiLang').onchange = (e) => setUiLang(e.target.value);
   $('#contentLang').onchange = (e) => { prefs.contentLang = e.target.value; savePrefs(); renderAll(); };
   document.addEventListener('keydown', (e) => {
     const inField = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
@@ -3268,6 +3090,10 @@ function wire() {
     return false;
   };
   window.__flush = () => { clearTimeout(saveTimer); api.writeAutosave({ exam, filePath, dirty }); if (syncRec(exam.id).dirty) cloudPush(); };
+  // pencere kapanırken (ana süreç bekler): açık sınav diske yazılır
+  window.__beforeClose = async () => { clearTimeout(saveTimer); await api.writeAutosave({ exam, filePath, dirty }); return true; };
+  // Wi-Fi eşitlemesinde karşı taraf bağlandığında açık sınavın son hâli depoda olsun
+  window.__lanFlush = async () => { if (api.lan) await api.lan.put(exam); return true; };
   window.__resume = () => cloudSoon();
   window.addEventListener('focus', () => { if (CL0.ready && Date.now() - (window.__lastPull || 0) > 20000) { window.__lastPull = Date.now(); cloudSoon(); } });
   setInterval(() => { if (CL0.ready && !document.hidden) cloudPull(); }, 60000);
@@ -3280,10 +3106,8 @@ async function init() {
     const info = await api.appInfo();
     if (info && info.device) deviceName = info.device;
     APPINFO = info || {};
-    if (APPINFO.version) { $('#appVer').textContent = 'v' + APPINFO.version; $('#appVer').title = versionText(); }
-    if (APPINFO.canUpdate) { $('#appVer').classList.add('click'); $('#appVer').onclick = runUpdate; }
-    if (APPINFO.patchDisabled) toast(t('updDisabled'), 'err', [], 12000);
-    if (api.updateStarted) api.updateStarted(); // yeni sürüm sorunsuz açıldı
+    if (window.APP_RELEASE) APPINFO.version = window.APP_RELEASE.version;
+    if (APPINFO.version && $('#appVer')) { $('#appVer').textContent = 'v' + APPINFO.version; $('#appVer').title = versionText(); }
   } catch { /* yok */ }
   wire();
   const saved = await api.readAutosave();
@@ -3296,11 +3120,41 @@ async function init() {
   renderAll();
   setCloudState(CL0.ready ? 'ok' : 'off');
   if (CL0.ready) cloudSoon();
-  renderUpdBtn();
-  // açılışta yeni sürüm her zaman denetlenir; varsa bildirim gelir
+  // açılışta yeni sürüm denetimi ortak çekirdekte (FC.updater, açılış + 6 saatte bir)
   window.checkUpdate = checkUpdate;
-  setTimeout(() => checkUpdate(false), 3000);
   setTimeout(() => cloudBackup(), 20000);
   setTimeout(() => contactFlush().catch(() => {}), 8000);
 }
+/* ------------------------------------------------------------------ kabuk (ortak çekirdek) bağlantısı */
+// kabuk.js (düz betik) uygulamanın iç işlevlerine yalnız bu nesne üzerinden ulaşır
+function setUiLang(l) {
+  if (!LK.includes(l) || l === prefs.uiLang) return;
+  prefs.uiLang = l;
+  if (prefs.syncLang) prefs.contentLang = l;
+  savePrefs(); renderAll();
+}
+async function syncNow() {
+  if (!CL0.ready || !CL0.user) return cloudModal();
+  try { await cloudPull(); if (syncRec(exam.id).dirty) await cloudPush(true); if (cloudState !== 'error') toast(t('cloudSynced'), 'ok'); } catch (e) { toast(t('error') + ': ' + e.message, 'warn'); }
+}
+// Wi-Fi'den (ya da başka yerden) gelen sınavı açar; açık sınavın kaydedilmemiş hâli önce yedeklenir
+async function openExamObject(data, kind) {
+  await keepLocal(kind || 'acmadan-once');
+  snap();
+  exam = normalizeExam(data);
+  filePath = null; dirty = false;
+  selected.clear();
+  renderAll();
+  api.writeAutosave({ exam, filePath, dirty });
+  cloudSoon();
+}
+// (Object.assign alıcıları kopyalamaz, değerini dondurur: canlı değerler defineProperties ile)
+Object.defineProperties(window.__app, {
+  exam: { get: () => exam, enumerable: true }, dirty: { get: () => dirty, enumerable: true }, filePath: { get: () => filePath, enumerable: true },
+});
+Object.assign(window.__app, {
+  prefs, cloudModal, syncNow, setUiLang, openExamObject, flushForUpdate, toast, confirmBox, modal, esc, examName,
+  cloudReady: () => CL0.ready, cloudConfig: () => CL0.config, renderAll, contactFlush,
+  setCloudConfig: (c) => { CL0.setConfig(c); setCloudState(CL0.ready ? 'ok' : 'off'); },
+});
 init();

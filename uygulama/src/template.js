@@ -15,8 +15,21 @@ function getMeta(dir) {
   } catch { return null; }
 }
 
+// 1.10.0: şablon hiçbir zaman silinmez — kaldırılan ya da yenisiyle değişen şablon "template-arsiv" klasörüne taşınır (son 20 tutulur)
+function archive(dir) {
+  if (!fs.existsSync(dir)) return null;
+  const root = dir + '-arsiv';
+  fs.mkdirSync(root, { recursive: true });
+  const to = path.join(root, new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19) + '-' + Math.random().toString(36).slice(2, 6));
+  fs.renameSync(dir, to);
+  try {
+    const all = fs.readdirSync(root).sort();
+    all.slice(0, Math.max(0, all.length - 20)).forEach((n) => fs.rmSync(path.join(root, n), { recursive: true, force: true }));
+  } catch { /* yok */ }
+  return to;
+}
 function remove(dir) {
-  fs.rmSync(dir, { recursive: true, force: true });
+  archive(dir);
 }
 
 function run(cmd, args, timeout = 180000) {
@@ -214,7 +227,7 @@ async function importTemplate(src, dir, opts, helpers) {
     images: [],
   };
   fs.writeFileSync(path.join(tmpDir, 'meta.json'), JSON.stringify(meta, null, 1));
-  fs.rmSync(dir, { recursive: true, force: true });
+  archive(dir);
   fs.renameSync(tmpDir, dir);
   return meta;
 }
@@ -270,7 +283,7 @@ function importRaw(dir, data) {
     fs.writeFileSync(path.join(tmpDir, f), Buffer.from(data.files[f], 'base64'));
   });
   fs.writeFileSync(path.join(tmpDir, 'meta.json'), JSON.stringify(data.meta, null, 1));
-  fs.rmSync(dir, { recursive: true, force: true });
+  archive(dir);
   fs.renameSync(tmpDir, dir);
   return getMeta(dir);
 }

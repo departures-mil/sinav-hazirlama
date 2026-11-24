@@ -1,15 +1,17 @@
 'use strict';
+// Sınav Hazırlama — preload. window.fcHost (ortak çekirdek: pencere düğmeleri, güncelleme, indirme) + window.api (uygulama).
+// 1.10.0: eski yama (.sinavyama) ve pencere kanalları kaldırıldı; pencere düğmeleri ve güncelleme ortak çekirdekte.
 const { contextBridge, ipcRenderer } = require('electron');
+require('./cekirdek/electron/fc-preload.js');
 
-// npm kitaplıklarının (pdf.js) adresi: yamalı açılışta da ana paketteki node_modules
+// npm kitaplıklarının (pdf.js, jszip, docx-preview) adresi: paket kökündeki node_modules
 const LIB = (process.argv.find((a) => a.startsWith('--sinav-lib=')) || '').slice(12) || null;
 
 const inv = (ch) => (...a) => ipcRenderer.invoke(ch, ...a);
+const on = (ch) => (cb) => { const f = (_e, d) => cb(d); ipcRenderer.on(ch, f); return () => ipcRenderer.removeListener(ch, f); };
 
 contextBridge.exposeInMainWorld('api', {
-  toggleFullscreen: inv('win:toggleFullscreen'),
-  minimize: inv('win:minimize'),
-  quit: inv('win:quit'),
+  shell: 'fc',                       // yeni kabuk (1.10.0+)
   openDialog: inv('dlg:open'),
   saveDialog: inv('dlg:save'),
   readExam: inv('exam:read'),
@@ -25,6 +27,7 @@ contextBridge.exposeInMainWorld('api', {
   openBackups: inv('backup:open'),
   cloudBackupLast: inv('backup:cloudLast'),
   cloudBackupWrite: inv('backup:cloudWrite'),
+  backupWrite: inv('backup:write'),
   getTemplate: inv('template:get'),
   importTemplate: inv('template:import'),
   readTemplateBg: inv('template:readBg'),
@@ -35,13 +38,8 @@ contextBridge.exposeInMainWorld('api', {
   exportTemplateRaw: inv('template:exportRaw'),
   importTemplateRaw: inv('template:importRaw'),
   appInfo: inv('app:info'),
-  contactMail: inv('contact:mail'),
   readDict: inv('dict:read'),
   libBase: LIB,
-  inspectPatch: inv('patch:inspect'),
-  installPatch: inv('patch:install'),
-  installPatchData: inv('patch:installData'),
-  removePatch: inv('patch:remove'),
   relaunch: inv('app:relaunch'),
   focusWin: inv('app:focus'),
   makePdf: inv('pdf:make'),
@@ -50,4 +48,11 @@ contextBridge.exposeInMainWorld('api', {
   translateDict: inv('translate:dict'),
   archiveRead: inv('archive:read'),
   archiveWrite: inv('archive:write'),
+  // Wi-Fi eşitleme
+  lan: {
+    status: inv('lan:status'), setOpen: inv('lan:setOpen'), pinShow: inv('lan:pinShow'), pinHide: inv('lan:pinHide'),
+    discover: inv('lan:discover'), pair: inv('lan:pair'), unpair: inv('lan:unpair'), put: inv('lan:put'), list: inv('lan:list'),
+    get: inv('lan:get'), sync: inv('lan:sync'), openBackups: inv('lan:openBackups'),
+    onChanged: on('lan:changed'), onPaired: on('lan:paired'),
+  },
 });
