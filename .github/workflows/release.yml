@@ -73,6 +73,7 @@ jobs:
       version: ${{ needs.build.outputs.version }}
       file_prefix: SinavHazirlama
       release_title: Sınav Hazırlama v${{ needs.build.outputs.version }}
+      min_version: 1.10.2
       files: |
         win-app=app.asar
         win-setup=*Setup*.exe
