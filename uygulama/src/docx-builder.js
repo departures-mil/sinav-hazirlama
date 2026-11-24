@@ -61,6 +61,44 @@ function makeHelpers(model) {
 
 const fmt = (n, lang) => String(Math.round((+n || 0) * 100) / 100).replace('.', lang === 'tr' ? ',' : '.');
 
+/* ---- 1.10.1: soru / şık görselleri (satır içi resim) ---- */
+// model._media: [{ name, buf, ext }] — belge yazılırken word/media altına konur, ilişkileri rIdQm<n>
+function mediaRun(model, im, maxWcm, maxHcm) {
+  if (!im || !im.data) return '';
+  const m = /^data:image\/(png|jpe?g);base64,(.+)$/.exec(im.data);
+  if (!m) return '';
+  model._media = model._media || [];
+  const i = model._media.length + 1;
+  const ext = m[1] === 'png' ? 'png' : 'jpeg';
+  model._media.push({ name: `qimg${i}.${ext}`, buf: Buffer.from(m[2], 'base64'), ext, rid: 'rIdQm' + i });
+  const EMU = 360000; // 1 cm
+  let w = (im.w || 400) * 9525, h = (im.h || 300) * 9525; // 96 dpi varsayımı
+  const sc = Math.min(1, (maxWcm * EMU) / w, (maxHcm * EMU) / h);
+  w = Math.round(w * sc); h = Math.round(h * sc);
+  const id = 500 + i;
+  return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${w}" cy="${h}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>` +
+    `<wp:docPr id="${id}" name="Resim ${i}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>` +
+    '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic>' +
+    `<pic:nvPicPr><pic:cNvPr id="${id}" name="qimg${i}.${ext}"/><pic:cNvPicPr/></pic:nvPicPr>` +
+    `<pic:blipFill><a:blip r:embed="rIdQm${i}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${w}" cy="${h}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
+    '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
+}
+// zip'e görselleri ve ilişkilerini ekler
+async function addMedia(zip, model) {
+  const media = model._media || [];
+  if (!media.length) return;
+  media.forEach((m) => zip.file('word/media/' + m.name, m.buf));
+  const relP = 'word/_rels/document.xml.rels';
+  let rels = zip.file(relP) ? await zip.file(relP).async('string') : '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
+  rels = rels.replace('</Relationships>', media.map((m) => `<Relationship Id="${m.rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${m.name}"/>`).join('') + '</Relationships>');
+  zip.file(relP, rels);
+  let ct = await zip.file('[Content_Types].xml').async('string');
+  if (!/Extension="png"/i.test(ct)) ct = ct.replace('<Types ', '<Types ').replace(/(<Types[^>]*>)/, '$1<Default Extension="png" ContentType="image/png"/>');
+  if (!/Extension="jpeg"/i.test(ct)) ct = ct.replace(/(<Types[^>]*>)/, '$1<Default Extension="jpeg" ContentType="image/jpeg"/>');
+  zip.file('[Content_Types].xml', ct);
+}
+
 /* ---- genel tablo ---- */
 function table(model, widths, rows, o = {}) {
   const border = (n) => `<w:${n} w:val="single" w:sz="6" w:space="0" w:color="555555"/>`;
@@ -126,12 +164,42 @@ function buildContent(model, layout) {
   if (variant !== 'key' && hasTest) {
     if (multi) out.head.push(partTitle(L.testPart, false));
     const colW = layout.colWidth;
-    model.questions.forEach((q) => {
+    const imgW = Math.max(3, (colW / 567) * 0.75);
+    if (model.biTest && h2) {
+      // iki dil yan yana: her soru iki hücreli bir satır (ikinci dilin hücresi kendi yönünde)
+      const W2 = Math.floor(layout.fullWidth / 2);
+      const cellOf = (H, lg, stem, opts, letters) => {
+        let x = H.para([H.run(q0.n + '. ', { b: true }), H.run(stem || '')], { keepNext: true, keepLines: true, before: 80, after: 40 });
+        opts.slice(0, model.optionCount).forEach((o, i) => {
+          const mk = variant === 'teacher' && model.markCorrect && q0.correct === i;
+          const runs = [H.run(letters[i] + ') ', { b: true, shd: mk ? 'C6EFCE' : null }), H.run(o || '', { b: mk, shd: mk ? 'C6EFCE' : null })];
+          if (q0.oimg && q0.oimg[i]) runs.push('<w:r><w:br/></w:r>' + mediaRun(model, q0.oimg[i], 3.5, 2.5));
+          if (mk) runs.push(H.run(' ✓', { b: true, color: '1E7B34' }));
+          x += H.para(runs, { ind: 200, keepLines: true, after: 0 });
+        });
+        void lg;
+        return x + H.para('', { after: 60 });
+      };
+      let q0 = null;
+      const B = (n) => `<w:${n} w:val="nil"/>`;
+      model.questions.forEach((q) => {
+        q0 = q;
+        const c1 = cellOf(makeHelpers(model), model.lang, q.stem, q.options, letters);
+        const c2 = cellOf(h2, model.lang2, q.stem2, q.options2 || [], model.letters2 || letters);
+        let x = '<w:tbl><w:tblPr>' + (model.rtl ? '<w:bidiVisual/>' : '') + `<w:tblW w:w="${W2 * 2}" w:type="dxa"/><w:tblBorders>${['top', 'left', 'bottom', 'right', 'insideH'].map(B).join('')}<w:insideV w:val="single" w:sz="4" w:space="0" w:color="999999"/></w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="90" w:type="dxa"/><w:right w:w="90" w:type="dxa"/></w:tblCellMar><w:tblLook w:val="0000"/></w:tblPr><w:tblGrid><w:gridCol w:w="${W2}"/><w:gridCol w:w="${W2}"/></w:tblGrid>`;
+        x += `<w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${W2}" w:type="dxa"/></w:tcPr>${c1}</w:tc><w:tc><w:tcPr><w:tcW w:w="${W2}" w:type="dxa"/></w:tcPr>${c2}</w:tc></w:tr></w:tbl>`;
+        out.questions.push(x);
+        if (q.img) out.questions.push(para(mediaRun(model, q.img, Math.min(12, (layout.fullWidth / 567) * 0.6), 6.5), { jc: 'center', after: 80 }));
+        else out.questions.push(para('', { after: 40 }));
+      });
+    } else model.questions.forEach((q) => {
       out.questions.push(para([run(q.n + '. ', { b: true }), run(q.stem)], { keepNext: true, keepLines: true, before: 120, after: 40 }));
+      if (q.img) out.questions.push(para(mediaRun(model, q.img, imgW, 6.5), { jc: 'center', keepNext: true, after: 40 }));
       const opts = q.options.slice(0, model.optionCount);
       const mark = (i) => variant === 'teacher' && model.markCorrect && q.correct === i;
       const maxLen = Math.max(...opts.map((o) => (o || '').length));
-      const inline = model.inlineShort && !opts.some((o) => /\n/.test(o || '')) &&
+      const hasOImg = !!(q.oimg && q.oimg.some(Boolean));
+      const inline = model.inlineShort && !hasOImg && !opts.some((o) => /\n/.test(o || '')) &&
         maxLen * (model.fontSize || 12) * 0.55 * 20 < colW / opts.length - 400;
       if (inline) {
         const step = Math.floor(colW / opts.length);
@@ -148,6 +216,7 @@ function buildContent(model, layout) {
         opts.forEach((o, i) => {
           const last = i === opts.length - 1;
           const runs = [run(letters[i] + ') ', { b: true, shd: mark(i) ? 'C6EFCE' : null }), run(o || '', { b: mark(i), shd: mark(i) ? 'C6EFCE' : null })];
+          if (hasOImg && q.oimg[i]) runs.push('<w:r><w:br/></w:r>' + mediaRun(model, q.oimg[i], Math.min(5, imgW), 3));
           if (mark(i)) runs.push(run(' ✓', { b: true, color: '1E7B34' }));
           out.questions.push(para(runs, { ind: 280, keepNext: !last, keepLines: true, after: last ? 60 : 0 }));
         });
@@ -408,6 +477,7 @@ async function buildFresh(model, meta, tplDir) {
   zip.file('word/styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}" w:eastAsia="${font}"/><w:sz w:val="${(model.fontSize || 12) * 2}"/><w:szCs w:val="${(model.fontSize || 12) * 2}"/><w:lang w:val="${model.lang === 'en' ? 'en-US' : 'tr-TR'}" w:bidi="ar-SA"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style></w:styles>`);
   zip.file('word/settings.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:defaultTabStop w:val="708"/><w:characterSpacingControl w:val="doNotCompress"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>');
   zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${NS}><w:body>${body}</w:body></w:document>`);
+  await addMedia(zip, model);
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
@@ -453,12 +523,19 @@ async function buildFromTemplate(model, meta, tplDir) {
   let head = parts.head;
   // kök öğede gerekli ad alanları yoksa ekle
   if (!/xmlns:r=/.test(head)) head = head.replace('<w:document ', '<w:document xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ');
+  // 1.10.1: görseller için çizim ad alanları
+  if (!/xmlns:wp=/.test(head)) head = head.replace('<w:document ', '<w:document xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" ');
+  if (!/xmlns:a=/.test(head)) head = head.replace('<w:document ', '<w:document xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ');
+  if (!/xmlns:pic=/.test(head)) head = head.replace('<w:document ', '<w:document xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" ');
   zip.file('word/document.xml', head + body + parts.tail);
+  await addMedia(zip, model);
   // Şablondaki belge özelliklerinde başlık
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
 async function buildDocx(model, { meta, tplDir }) {
+  if (model.biTest) model = { ...model, columns: 1 };
+  model._media = [];
   const hasImgs = !!(meta && meta.images && meta.images.length && meta.images.every((f) => fs.existsSync(path.join(tplDir, f))));
   // PDF çıktısıyla aynı: antet, şablonun sayfa resmi olarak her sayfanın arkasına konur; kenar boşlukları PDF'tekiyle aynıdır
   if (hasImgs && !(meta.docxMode === 'word')) return buildFresh(model, meta, tplDir);

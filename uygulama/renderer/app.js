@@ -55,7 +55,7 @@ function normalizeExam(e) {
   x.questions = (e.questions || []).map((q) => {
     const opts = (q.options || []).slice(0, 5).map(ML);
     while (opts.length < 5) opts.push(ML());
-    return { id: q.id || uid(), text: ML(q.text), options: opts, correct: Number.isInteger(q.correct) ? q.correct : -1, ghost: !!q.ghost, tag: typeof q.tag === 'string' ? q.tag.slice(0, 40) : '' };
+    return { id: q.id || uid(), text: ML(q.text), options: opts, correct: Number.isInteger(q.correct) ? q.correct : -1, ghost: !!q.ghost, tag: typeof q.tag === 'string' ? q.tag.slice(0, 40) : '', ...window.EK.qExtra(q) };
   });
   const num = (v, d) => (Number.isFinite(+v) && v !== '' && v != null ? +v : d);
   x.scenarios = (e.scenarios || []).map((sc) => ({
@@ -230,6 +230,7 @@ function applyUiLang() {
   if ($('#uiLang')) fillLangSelect($('#uiLang'), prefs.uiLang);
   fillLangSelect($('#contentLang'), prefs.contentLang);
   updateFileName();
+  if (window.EK && window.EK.relabelSide) window.EK.relabelSide();
 }
 
 /* ------------------------------------------------------------------ çizim */
@@ -277,6 +278,7 @@ function questionCard(q, i) {
       <span class="qstatus"></span>
       <span class="qlangs">${langBadges(q)}</span>
       <select class="qtag${tagOf(q) ? ' on' : ''}" title="${esc(t('tagTip'))}"><option value="">${esc(tagNoneName())}</option>${tagOptions(tagOf(q))}</select>
+      ${window.EK.zorSelect(q)}
       <div class="qtools">
         <button data-a="up" title="${t('moveUp')}">↑</button>
         <button data-a="down" title="${t('moveDown')}">↓</button>
@@ -284,15 +286,22 @@ function questionCard(q, i) {
         <button data-a="dup" title="${t('duplicate')}">⧉</button>
         <button data-a="shuffle" title="${t('shuffleOptions')}">⇄</button>
         <button data-a="tr" title="${t('translate')}">🌐 ${t('translate')}</button>
+        <button data-a="img" title="${esc(t('ekImgTip'))}">🖼</button>
+        <button data-a="hist" class="histbtn" title="${esc(t('ekHistTip'))}">🕘<small>${(q.gecmis || []).length || ''}</small></button>
+        <button data-a="audit" title="${esc(t('ekAuditOneTip'))}">🤖</button>
         <button data-a="ghost" class="ghostbtn${q.ghost ? ' on' : ''}" title="${t(q.ghost ? 'ghostOffTip' : 'ghostOnTip')}">👻 ${t(q.ghost ? 'ghostOff' : 'ghostOn')}</button>
         <button data-a="del" class="del" title="${t('delete')}">🗑</button>
       </div>
     </div>
     <textarea class="stem" rows="2"></textarea>
+    <div class="qimg" data-k="s"></div>
+    ${window.EK.metaRow(q)}
     <div class="opts">${Array.from({ length: n }, (_, k) => `
       <div class="opt" data-k="${k}">
         <button class="letter" title="${t('markCorrect')}">${L[k]}</button>
         <input type="text">
+        <span class="oimg" data-k="${k}"></span>
+        <button class="mv" data-m="img" title="${esc(t('ekOptImgTip'))}">🖼</button>
         <button class="mv" data-m="up" title="${t('moveUp')}">▲</button>
         <button class="mv" data-m="down" title="${t('moveDown')}">▼</button>
         <button class="mv" data-m="clr" title="${t('clearOption')}">✕</button>
@@ -306,11 +315,12 @@ function questionCard(q, i) {
     const k = +row.dataset.k;
     bindML($('input', row), q.options[k], null, refreshBadges);
     $('input', row).placeholder = $('input', row).placeholder || `${t('optionPh')} ${L[k]}`;
-    $('.letter', row).onclick = () => { snap(); q.correct = q.correct === k ? -1 : k; refreshCorrect(card, q); updateSide(); changed(); };
+    $('.letter', row).onclick = () => { snap(); const b0 = window.EK.qSnap(q); q.correct = q.correct === k ? -1 : k; window.EK.histCommit(q, b0, card); refreshCorrect(card, q); updateSide(); changed(); };
     row.querySelectorAll('.mv').forEach((b) => {
       b.onclick = () => {
         const m = b.dataset.m;
-        if (m === 'clr') { snap(); q.options[k] = ML(); if (q.correct === k) q.correct = -1; return rerenderCard(q); }
+        if (m === 'img') return window.EK.pickImage(q, k);
+        if (m === 'clr') { snap(); q.options[k] = ML(); if (q.oimg) q.oimg[k] = ''; if (q.correct === k) q.correct = -1; return rerenderCard(q); }
         const j = m === 'up' ? k - 1 : k + 1;
         if (j < 0 || j >= n) return;
         snap(); swapOptions(q, k, j); rerenderCard(q, j);
@@ -321,6 +331,7 @@ function questionCard(q, i) {
   card.querySelectorAll('[data-a]').forEach((b) => { b.onclick = () => questionAction(b.dataset.a, q); });
   $('.qnum', card).onclick = () => { if (!q.ghost) moveToModal(q); };
   $('.qtag', card).onchange = (e) => { snap(); q.tag = e.target.value; e.target.classList.toggle('on', !!q.tag); updateSide(); changed(); };
+  window.EK.wireCard(card, q);
   refreshCorrect(card, q);
   return card;
 }
@@ -348,6 +359,7 @@ function rerenderCard(q, focusOpt) {
 
 function swapOptions(q, a, b) {
   [q.options[a], q.options[b]] = [q.options[b], q.options[a]];
+  if (q.oimg) [q.oimg[a], q.oimg[b]] = [q.oimg[b] || '', q.oimg[a] || ''];
   if (q.correct === a) q.correct = b; else if (q.correct === b) q.correct = a;
 }
 function shuffleQuestionOptions(q) {
@@ -356,6 +368,7 @@ function shuffleQuestionOptions(q) {
   for (let i = n - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
   const old = q.options.slice(0, n);
   for (let i = 0; i < n; i++) q.options[i] = old[idx[i]];
+  if (q.oimg) { const oi = q.oimg.slice(0, n); for (let i = 0; i < n; i++) q.oimg[i] = oi[idx[i]] || ''; }
   if (q.correct >= 0 && q.correct < n) q.correct = idx.indexOf(q.correct);
 }
 
@@ -384,6 +397,12 @@ async function questionAction(a, q) {
     await translateQuestion(q);
   } else if (a === 'moveto') {
     moveToModal(q);
+  } else if (a === 'img') {
+    window.EK.pickImage(q, -1);
+  } else if (a === 'hist') {
+    window.EK.historyModal(q);
+  } else if (a === 'audit') {
+    window.EK.auditModal([q]);
   }
 }
 
@@ -1664,6 +1683,10 @@ function bankToQuestion(bq) {
   q.options = arr.map((x) => ML(x.o));
   while (q.options.length < 5) q.options.push(ML());
   q.correct = arr.indexOf(right);
+  // 1.10.1: görsel, zorluk, konu, kaynak (şık görselleri karıştırılan sırayla)
+  Object.assign(q, window.EK.qExtra({ ...bq, gecmis: null, ist: null, oimg: Array.isArray(bq.oimg) ? arr.map((x) => bq.oimg[bq.options.indexOf(x.o)] || '') : null }));
+  if (!q.konu && bq.topic) q.konu = window.EK.bankKonu(bq);
+  if (!q.zor && bq.lvl) q.zor = ({ 1: 'k', 2: 'o', 3: 'z' })[bq.lvl] || '';
   return q;
 }
 function bankToScenario(bs, pts) {
@@ -1674,7 +1697,7 @@ function bankToScenario(bs, pts) {
   return s2;
 }
 // sınavdaki öğeyi arşiv biçimine çevirir
-const examQToBank = (q, lvl) => ({ lvl, topic: 'mine', text: ML(q.text), options: q.options.slice(0, S().optionCount).map(ML), correct: q.correct });
+const examQToBank = (q, lvl) => ({ lvl, topic: 'mine', text: ML(q.text), options: q.options.slice(0, S().optionCount).map(ML), correct: q.correct, ...window.EK.qExtra({ ...q, gecmis: null, ist: null, oimg: q.oimg ? q.oimg.slice(0, S().optionCount) : null }) });
 const examSToBank = (s, lvl) => ({ lvl, topic: 'mine', title: ML(s.title), text: ML(s.text), questions: s.questions.map((q) => ({ text: ML(q.text), answer: ML(q.answer) })) });
 const lastScenPts = () => { const l = exam.scenarios[exam.scenarios.length - 1]; return l && l.questions.length ? +l.questions[l.questions.length - 1].points || 5 : 5; };
 
@@ -2311,13 +2334,17 @@ function buildModel(variant, lang, opts = {}) {
     // anlam sütunları: tek sütunda "Anlamı", ikisi birlikteyse dil adlarıyla
     cols: [v.cols.ar && 'meaning', v.cols.tr && 'tr'].filter(Boolean).map((k, _, a) => ({ key: k, label: a.length > 1 ? t(k === 'tr' ? 'lbl_colTr' : 'lbl_colAr', null, lang) : t('lbl_meaning', null, lang) })),
   } : null;
-  const questions = sections.test ? liveQs().filter((q) => tagMatch(q, opts.tag || '')).map((q, i) => ({
-    n: i + 1, stem: pick(q.text), options: q.options.slice(0, s.optionCount).map(pick),
+  const biTest = !!(lang2 && opts.biTest);
+  const qList = opts.qList || liveQs().filter((q) => tagMatch(q, opts.tag || '') && window.EK.konuMatch(q, opts.konu || ''));
+  const questions = sections.test ? qList.map((q, i) => ({
+    n: i + 1, id: q.id, stem: pick(q.text), options: q.options.slice(0, s.optionCount).map(pick),
+    stem2: biTest ? pick2(q.text) : '', options2: biTest ? q.options.slice(0, s.optionCount).map(pick2) : null,
     correct: isAnswered(q) ? q.correct : -1,
+    img: q.img || '', oimg: q.oimg && q.oimg.some(Boolean) ? q.oimg.slice(0, s.optionCount).map((x) => x || '') : null,
   })) : [];
   const scenTotal = scenarios.reduce((a, x) => a + x.points, 0);
   const model = {
-    variant, lang, rtl: lang === 'ar', lang2, rtl2: lang2 === 'ar',
+    variant, lang, rtl: lang === 'ar', lang2, rtl2: lang2 === 'ar', biTest, letters2: lang2 ? window.LETTERS[lang2] : null,
     font: s.font, fontSize: s.fontSize, columns: s.columns, optionCount: s.optionCount,
     showInfo: s.showInfo, markCorrect: s.markCorrect, keyAtEnd: s.keyAtEnd, pageNumbers: s.pageNumbers, inlineShort: s.inlineShort,
     scenNewPage: s.scenNewPage,
@@ -2341,6 +2368,7 @@ function fileBase(variant, lang, sections) {
 }
 async function doOutput(variant, kind, lang, opts = {}) {
   const model = buildModel(variant, lang, opts);
+  await window.EK.prepareModelImages(model);
   const fname = fileBase(variant, lang, opts.sections) + (model.lang2 ? '-' + model.lang2 : '');
   const busy = toast(t('exporting'), '', [], 2000);
   void busy;
@@ -2375,6 +2403,10 @@ async function outputModal() {
       <label style="display:flex;gap:8px;align-items:center" id="outLang2Box">${t('secondLang')}
       <select class="in" id="outLang2" style="width:auto"><option value="">${t('none')}</option>${LK.map((k) => `<option value="${k}">${window.LANGS[k]}</option>`).join('')}</select></label>
       <span style="color:var(--muted);font-size:12px">🖼 ${template ? esc(template.name) : t('noTemplate')}</span></div>
+    <div class="row" id="outBiBox"><label class="chk"><input type="checkbox" id="outBi"${prefs.outBi ? ' checked' : ''}> ${esc(t('ekBiTest'))}</label><span class="hint" style="font-size:12px;color:var(--muted)">${esc(t('ekBiTestHint'))}</span></div>
+    <div class="row"><label style="display:flex;gap:8px;align-items:center">${esc(t('ekKonu'))}
+      <select class="in" id="outKonu" style="width:auto">${window.EK.konuOptions(liveQs())}</select></label>
+      <button class="btn" id="outOmr">📋 ${esc(t('ekOmrForm'))}</button></div>
     <div class="row"><label style="display:flex;gap:8px;align-items:center">${esc(t('outTag'))}
       <select class="in" id="outTag" style="width:auto"><option value="">${esc(t('filterAll'))} (${liveQs().length})</option>${QTAGS.map((k) => `<option value="${k}">${esc(tagName(k))} (${liveQs().filter((q) => tagOf(q) === k).length})</option>`).join('')}<option value="none">${esc(tagNoneName())} (${liveQs().filter((q) => !tagOf(q)).length})</option></select></label></div>
     <div style="font-size:12px;color:var(--muted)">${t('outputContent')}</div>
@@ -2395,17 +2427,21 @@ async function outputModal() {
   };
   const sync = () => {
     const sc = sections();
-    $('#outLang2Box', body).style.display = sc.scen ? '' : 'none';
+    $('#outLang2Box', body).style.display = sc.scen || sc.test ? '' : 'none';
+    $('#outBiBox', body).style.display = sc.test && $('#outLang2', body).value ? '' : 'none';
     if ($('#outMissing', body)) $('#outMissing', body).style.display = sc.test ? '' : 'none';
   };
   body.querySelectorAll('.outSec').forEach((c) => { c.onchange = sync; });
+  $('#outLang2', body).onchange = sync;
+  $('#outBi', body).onchange = (e) => { prefs.outBi = e.target.checked; savePrefs(); };
+  $('#outOmr', body).onclick = () => window.EK.omrFormModal({ tag: $('#outTag', body).value, konu: $('#outKonu', body).value });
   sync();
   body.querySelectorAll('[data-v]').forEach((b) => {
     b.onclick = async () => {
       const sc = sections();
       if (!sc.test && !sc.scen && !sc.vocab) return toast(t('nothingToOutput'), 'warn');
       body.querySelectorAll('[data-v]').forEach((x) => { x.disabled = true; });
-      await doOutput(b.dataset.v, b.dataset.k, $('#outLang', body).value, { sections: sc, lang2: sc.scen ? $('#outLang2', body).value : '', tag: $('#outTag', body).value });
+      await doOutput(b.dataset.v, b.dataset.k, $('#outLang', body).value, { sections: sc, lang2: sc.scen || sc.test ? $('#outLang2', body).value : '', tag: $('#outTag', body).value, konu: $('#outKonu', body).value, biTest: sc.test && $('#outBi', body).checked });
       body.querySelectorAll('[data-v]').forEach((x) => { x.disabled = false; });
     };
   });
@@ -3069,6 +3105,7 @@ function wire() {
   $('#btnDelSel').onclick = deleteSelected;
   $('#btnShuffleQ').onclick = shuffleQuestions;
   $('#btnShuffleO').onclick = shuffleAllOptions;
+  window.EK.wireSide();
   if ($('#uiLang')) $('#uiLang').onchange = (e) => setUiLang(e.target.value);
   $('#contentLang').onchange = (e) => { prefs.contentLang = e.target.value; savePrefs(); renderAll(); };
   document.addEventListener('keydown', (e) => {
@@ -3076,6 +3113,7 @@ function wire() {
     if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); saveExam(e.shiftKey); }
     else if (e.ctrlKey && e.key.toLowerCase() === 'o') { e.preventDefault(); openExam(); }
     else if (e.ctrlKey && e.key.toLowerCase() === 'p') { e.preventDefault(); outputModal(); }
+    else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); window.EK.searchModal(); }
     else if (e.ctrlKey && e.key.toLowerCase() === 'f') { e.preventDefault(); findOpen(); }
     else if (e.key === 'F3') { e.preventDefault(); if (FIND.bar) findShow(e.shiftKey ? -1 : 1); else findOpen(); }
     else if (e.ctrlKey && e.key.toLowerCase() === 'z' && !inField) { e.preventDefault(); undo(); }
@@ -3154,6 +3192,12 @@ Object.defineProperties(window.__app, {
 });
 Object.assign(window.__app, {
   prefs, cloudModal, syncNow, setUiLang, openExamObject, flushForUpdate, toast, confirmBox, modal, esc, examName,
+  // 1.10.1 eklentileri (ek-*.js)
+  snap, changed, undo, renderList, rerenderCard, scrollToQ, liveQs, qNumber, isAnswered, letters, S, CL, LK, ML, newQuestion, newExam, normalizeExam,
+  bankToQuestion, buildModel, doOutput, tagName, tagOf, selected, updateSide, savePrefs, keepLocal, openCloudExam, setTab,
+  tagKeys: () => QTAGS.slice(), getPdfjs,
+  cloudList: async () => (CL0.ready && CL0.user ? CL0.listExams() : []), cloudGet: (id) => CL0.getExam(id),
+  openFilePath: async (p) => { const data = await api.readExam(p); await keepLocal('acmadan-once'); snap(); exam = normalizeExam(data); filePath = p; dirty = false; selected.clear(); renderAll(); api.writeAutosave({ exam, filePath, dirty }); },
   cloudReady: () => CL0.ready, cloudConfig: () => CL0.config, renderAll, contactFlush,
   setCloudConfig: (c) => { CL0.setConfig(c); setCloudState(CL0.ready ? 'ok' : 'off'); },
 });
