@@ -1,0 +1,82 @@
+{
+  "name": "sinav-hazirlama",
+  "productName": "Sinav Hazirlama Sistemi",
+  "version": "1.10.0",
+  "description": "Çoktan seçmeli sınav hazırlama, çeviri ve çıktı uygulaması",
+  "main": "uygulama/main.js",
+  "author": "departures-mil",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "surum": "node tools/surum.js",
+    "eski-kanal": "node tools/eski-kanal.js",
+    "ekran": "node tools/ekran.js",
+    "test": "node --test test/app.test.js test/lan.test.js test/electron-smoke.test.js",
+    "test:electron": "node --test test/electron-smoke.test.js",
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "dependencies": {
+    "docx-preview": "^0.4.1",
+    "jszip": "^3.10.2",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.10.38"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.departures.sinavhazirlama",
+    "productName": "Sinav Hazirlama Sistemi",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "package.json",
+      "uygulama/**/*",
+      "!**/*.map",
+      "!node_modules/pdfjs-dist/legacy/**",
+      "!node_modules/pdfjs-dist/types/**",
+      "!node_modules/pdfjs-dist/web/**",
+      "!node_modules/pdfjs-dist/image_decoders/**",
+      "!node_modules/pdfjs-dist/build/*.mjs.map",
+      "!node_modules/pdfjs-dist/build/pdf.mjs",
+      "!node_modules/pdfjs-dist/build/pdf.worker.mjs",
+      "!node_modules/pdfjs-dist/build/pdf.sandbox*"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": true
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Sınav Hazırlama Sistemi",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "multiLanguageInstaller": true,
+      "installerLanguages": [
+        "tr_TR",
+        "en_US",
+        "ar_SA"
+      ],
+      "language": "1055",
+      "artifactName": "SinavHazirlama-Setup-${version}.${ext}"
+    }
+  }
+}

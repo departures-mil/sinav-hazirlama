@@ -3,14 +3,34 @@
 Çoktan seçmeli sınav hazırlama, çeviri ve çıktı programı (Windows, Electron). Sınavlar kullanıcının Firebase hesabında
 eşitlenir; **kayıtlar bu depoda bulunmaz**.
 
-- `uygulama/` — programın kodu (npm paketleri hariç: `docx-preview`, `jszip`, `pdf-lib`, `pdfjs-dist`).
-- `guncelleme/desktop.json` + `SinavHazirlama-<sürüm>.sinavyama` — Ed25519 imzalı güncelleme (yama). Program buradan
-  indirir; imzası tutmayanı kurmaz. 1.9.0 tam sürüm, sonraki sürümler tek tıkla yama olarak gelir.
-- İmza anahtarı depoda yoktur (`C:\Claude Programlarım\_Anahtarlar\SinavHazirlama`).
+- `uygulama/` — programın kodu (Electron ana süreç `main.js`, arayüz `renderer/`). npm paketleri kökteki `package.json`'da.
+- `uygulama/cekirdek/`, `uygulama/renderer/cekirdek/` — ortak çekirdeğin gömülü kopyası (departures-mil/ortak-cekirdek;
+  commit `VERSION` dosyasında). Pencere, sağ üst düğmeler, güncelleme, iletişim, çökme raporu, Kullanım Limitleri, ilk açılış
+  rehberi, "neler yeni", tema/şema/yazı boyutu buradan gelir. Bağlantı: `renderer/kabuk.js`.
+- `guncelleme/bank.json` — çevrimiçi soru arşivi (`node araclar/arsiv.js` üretir; program GitHub'dan okur).
+- `guncelleme/desktop.json` — YALNIZ ≤1.9.10 kurulumları için köprü (eski imzalı .sinavyama kanalı kapandı; bkz. `tools/eski-kanal.js`).
+
+## Kurulum ve güncelleme (1.10.0+)
+- Program **kurulum programıyla** gelir: `SinavHazirlama-<sürüm>-win-setup.exe` (NSIS, kullanıcı başına, tek tık, tr/en/ar).
+  Veriler `%APPDATA%\Sinav Hazirlama Sistemi` altında kalır (sınav otomatik kaydı, şablon, arşiv, yedekler, Wi-Fi eşitleme).
+- Güncelleme yalnız **GitHub Releases + latest.json**: Güncelle düğmesi önce yalnız değişen kısımları (FCD1 yaması), olmazsa
+  tam `app.asar`'ı indirir; SHA-256 ile doğrular. Sürüm tek: `package.json` (semver), etiket `vX.Y.Z`.
+- İmza anahtarı / şifre depoya girmez.
 
 ## Yeni sürüm
-1. Kodu değiştir, `uygulama/package.json` sürümünü artır (ör. 1.9.1).
-2. `OZEL_ANAHTAR=... node araclar/yayinla.js "notlar"` → `git add -A && git commit && git push`
+1. Kodu değiştir, `node tools/surum.js X.Y.Z` (package.json + `renderer/surum.js`), `release-notes.json`'a tr/en/ar notları yaz.
+2. `npm test` (duman testi + Wi-Fi eşitleme testi + Electron açılış testi; Linux'ta xvfb).
+3. main'e gönder; GitHub → Actions → **release** → *Run workflow* (main). CI: test → Windows derlemesi → ortak
+   `reusable-release.yml` (son 5 sürüme yama + latest.json). Testler geçmezse yayın olmaz.
+
+## Eşitleme (hiçbir veri silinmez)
+- **Bulut**: kullanıcının KENDİ Firebase'i (Ayarlar → Eşitleme ya da üstteki Bulut). Buluttan "Arşivle" sınavı silmez
+  (`deleted:true`, Arşiv'den geri alınır); başka cihazda arşivlenen açık sınav burada kalır. Çakışmada diğer sürüm
+  "çakışma kopyası" olarak saklanır; buluttan gelen sürüm açık sınavın yerine geçmeden önce yerel hâl `yedekler/esitleme`'ye yazılır.
+- **Wi-Fi** (üst çubukta Wi-Fi düğmesi): aynı modemdeki iki bilgisayar bir kez 6 haneli PIN ile eşleşir; sonra 3 dakikada bir
+  ve "Şimdi eşitle" ile eşitlenir. İstekler eşleşme anahtarıyla imzalı (HMAC) ve şifreli (AES-256-GCM). Birleştirme ortak
+  çekirdeğin kuralıyla: yeni olan kalır, eski hâl `wifi-esitleme/cakisma`'ya; uzak silme yerelde yalnız "arşivlendi" olur.
+  Kod: `uygulama/src/lan.js`, arayüz `renderer/kabuk.js`.
 
 ## 1.9.2
 - Ayarlar > Kullanım Limitleri (`renderer/kullanim.js` = duyurular/istemci/kullanim.js). Yöneticinin projesine giden iletişim mesajları sayılmaz (`haric`).

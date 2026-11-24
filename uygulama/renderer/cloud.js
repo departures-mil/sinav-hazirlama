@@ -236,13 +236,19 @@
     }
     return times[0];
   }
+  // 1.10.0: bulutta da hiçbir sınav silinmez. "Sil" sınavı arşivler (deleted:true + deletedAt); veri ve parçalar yerinde
+  // kalır, Arşiv listesinden geri alınabilir. Diğer cihazda açık olan sınav silinmez (eşitleme kuralı: uzak silme → arşiv).
   async function deleteExam(id) {
     const base = `${userPath()}/exams/${id}`;
-    const head = await examHead(id);
-    const writes = [];
-    for (let i = 0; i < ((head && head.parts) || 0); i++) writes.push(del(`${base}/parts/${i}`));
-    writes.push(del(base));
-    await commit(writes);
+    await commit([{ update: { name: base, fields: fieldsOf({ deleted: true, deletedAt: Date.now() }) }, updateMask: { fieldPaths: ['deleted', 'deletedAt'] } }]);
+  }
+  async function restoreExam(id) {
+    const base = `${userPath()}/exams/${id}`;
+    await commit([{ update: { name: base, fields: fieldsOf({ deleted: false, deletedAt: 0, updatedAt: Date.now() }) }, updateMask: { fieldPaths: ['deleted', 'deletedAt', 'updatedAt'] } }]);
+  }
+  async function listArchived() {
+    const docs = await listAll(`${userPath()}/exams`, ['name', 'device', 'updatedAt', 'info', 'deleted', 'deletedAt']);
+    return docs.filter((d) => d.deleted).sort((a, b) => (b.deletedAt || b.updatedAt || 0) - (a.deletedAt || a.updatedAt || 0));
   }
 
   /* ---------------- şablon ---------------- */
@@ -262,10 +268,8 @@
         chunks.forEach((c, i) => writes.push(upd(`${userPath()}/tplchunks/${name}~${i}`, { d: c })));
       });
     }
-    old.forEach((f) => {
-      const now = files.find((x) => x.name === f.name);
-      for (let i = now ? now.parts : 0; i < f.parts; i++) writes.push(del(`${userPath()}/tplchunks/${f.name}~${i}`));
-    });
+    // 1.10.0: eski şablon parçaları silinmez (kaldırma yalnız "removed" işaretidir; geri yüklenebilir)
+    void old;
     writes.push(upd(`${userPath()}/meta/template`, raw
       ? { removed: false, stamp: raw.meta.stamp || '', meta: JSON.stringify(raw.meta), files: JSON.stringify(files), updatedAt: Date.now() }
       : { removed: true, stamp: '', meta: '', files: '[]', updatedAt: Date.now() }));
@@ -288,91 +292,13 @@
     return { meta: JSON.parse(h.meta), files };
   }
 
-  /* ---------------- program güncellemeleri ---------------- */
-  // updates/{kanal} (desktop | android): sürüm bilgisi; updates/{kanal}/parts/{sürüm}~{n}: base64 parçalar.
-  // Herkes okuyabilir (dosyalar imzalıdır, uygulama imzayı denetler); yalnızca yayıncı hesabı yazabilir.
-  // Güncellemeler programa gömülü kaynaktan (update-source.js) okunur; yoksa kullanıcının bulut ayarından
-  const updCfg = () => window.SINAV_UPDATE_SRC || cfg;
-  async function pubGet(path) {
-    const c = updCfg();
-    if (!c) throw fail('NO_CONFIG');
-    const headers = {};
-    const same = cfg && c.projectId === cfg.projectId;
-    if (user && same) { try { headers.Authorization = 'Bearer ' + await idToken(); } catch { /* girişsiz de okunur */ } }
-    const url = (c.emu ? c.emu.fs : 'https://firestore.googleapis.com') + `/v1/projects/${c.projectId}/databases/(default)/documents/${path}?key=${encodeURIComponent(c.apiKey)}`;
-    const r = await request(url, { headers });
-    const noDb = r.j && r.j.error && /database .*(does not exist|not found)|has not been used|is disabled/i.test(r.j.error.message || '');
-    if (r.status === 404 && !noDb) return null;
-    if (!r.ok) throw dbError(r);
-    return docOut(r.j);
-  }
-  // 1.9.0: güncellemeler GitHub'dan gelir (departures-mil/sinav-hazirlama → guncelleme/{kanal}.json + dosya).
-  // Firebase yalnızca canlı veri (sınav eşitleme, iletişim) içindir. Paketler Ed25519 ile imzalıdır.
-  const GITHUB_RAW = 'https://raw.githubusercontent.com/departures-mil/sinav-hazirlama/main/guncelleme/';
-  async function updateHead(channel) {
-    let r;
-    try { r = await fetch(`${GITHUB_RAW}${channel}.json?t=${Date.now()}`, { cache: 'no-store' }); } catch { throw fail('NETWORK'); }
-    if (r.status === 404) return null;
-    if (!r.ok) throw fail('NETWORK', 'HTTP ' + r.status);
-    return r.json();
-  }
-  // onProgress(indirilen bayt, toplam bayt, hız bayt/sn)
-  async function getUpdate(channel, head, onProgress) {
-    let r;
-    try { r = await fetch(GITHUB_RAW + head.file, { cache: 'no-store' }); } catch { throw fail('NETWORK'); }
-    if (!r.ok) throw fail('NETWORK', 'HTTP ' + r.status);
-    const total = +head.size || +r.headers.get('Content-Length') || 0;
-    const t0 = Date.now();
-    const chunks = [];
-    let got = 0;
-    const rd = r.body.getReader();
-    for (;;) {
-      const { done, value } = await rd.read();
-      if (done) break;
-      chunks.push(value);
-      got += value.length;
-      if (onProgress) onProgress(got, Math.max(total, got), got / Math.max((Date.now() - t0) / 1000, 0.05));
-    }
-    const bytes = new Uint8Array(got);
-    let o = 0;
-    for (const c of chunks) { bytes.set(c, o); o += c.length; }
-    let bin = '';
-    for (let i = 0; i < bytes.length; i += 32768) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 32768));
-    return btoa(bin);
-  }
-
-  /* ---------------- admin iletişim ---------------- */
-  // Mesajlar güncelleme projesindeki iletisim/ bölümüne yazılır; kurallar yalnızca yeni kayıt eklemeye izin verir,
-  // okuma ve silme yalnızca yöneticinin aktarım hesabına açıktır. Alıcı adres programda değil, yönetici tarafındadır.
-  // 1.9.3: iletişim mesajı iki bağımsız kanaldan gider; biri kabul ederse ulaşmış sayılır.
-  //  1) Yöneticinin mesaj kutusu: yöneticinin Firestore projesindeki "mesajlar" (yalnızca ekleme; kimse okuyamaz)
-  //  2) E-posta kopyası: FormSubmit, ana süreçten Referer'lı olarak (file:// sayfadan gönderim reddedilir)
-  const ADMIN_INBOX = 'https://firestore.googleapis.com/v1/projects/comm-calc-103111111/databases/(default)/documents/mesajlar?key=AIzaSyB12RFS6ENPpmnnPsETfjedNH-3hmNWQvA';
-  async function sendContact(m) {
-    const S = (v) => ({ stringValue: String(v == null ? '' : v).slice(0, 4000) });
-    const fields = {
-      mesaj: S(m.mesaj), konu: S('Sınav Hazırlama · ' + (m.konu || '')), dil: S(m.dil), surum: S(m.surum),
-      platform: S('Sınav Hazırlama · ' + (m.platform || '') + (m.cihaz ? ' · ' + m.cihaz : '')), zaman: { timestampValue: new Date().toISOString() },
-    };
-    if (m.ad) fields.ad = S(m.ad);
-    if (m.donus) fields.iletisim = S(m.donus);
-    const inbox = request(ADMIN_INBOX, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) })
-      .then((r) => r.ok, () => false);
-    const mail = (window.api && window.api.contactMail) ? Promise.resolve(window.api.contactMail(m)).then((r) => !!(r && r.ok), () => false) : Promise.resolve(false);
-    const [a, b] = await Promise.all([inbox, mail]);
-    if (!a && !b) throw fail('OFFLINE', 'contact');
-    return { ok: true };
-  }
-
   window.Cloud = {
     parseConfig, shareCode, setConfig, signIn, signOut, resetPassword,
     get config() { return cfg; },
     get user() { return user; },
     get ready() { return !!(cfg && user); },
-    listExams, examHead, getExam, putExam, deleteExam,
+    listExams, listArchived, examHead, getExam, putExam, deleteExam, restoreExam,
     templateHead, putTemplate, getTemplate,
-    updateHead, getUpdate, get updateReady() { return true; },
-    sendContact,
     store,
   };
 })();
