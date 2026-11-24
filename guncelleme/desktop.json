@@ -1,9 +1,9 @@
 {
- "version": "1.9.10",
+ "version": "1.9.11",
  "minBase": "1.9.0",
- "notes": "Üst çubuk tek satır: gruplanmış düğmeler, Kaydet ▾ menüsü (Farklı Kaydet), kısa dil kutuları, sağda Bul/Geri al/Güncelle/Eşitle/Küçült/Pencere/Kapat; dar pencerede yalnız simgeler",
- "file": "SinavHazirlama-1.9.10.sinavyama",
- "size": 13777704,
- "sha": "a7c063ded15f96c3c175c18afcc8e4560fb40e48be1ba9eab8eb0337f36d046f",
- "publishedAt": "2026-11-23T09:05:00.863Z"
+ "notes": "Yeni: ✦ Asistan Agent — bütün programlarınızdaki çalışmanızı izler ve daha verimli çalışmanız için öneriler verir (bildirim + program içi panel). Ayarlar'dan açılıp kapatılabilir.",
+ "file": "SinavHazirlama-1.9.11.sinavyama",
+ "size": 13820781,
+ "sha": "89c7835e96aa8ee3bbde2be2ecef8a91a4bff5bbd852802ccb02d6f25909c5f9",
+ "publishedAt": "2026-11-24T05:41:13.172Z"
 }
