@@ -4,8 +4,8 @@
 // Eski güncelleyici ne yapar (1.9.x, renderer/app.js checkUpdate + cloud.js updateHead, src/patcher.js):
 //   raw.githubusercontent.com/departures-mil/sinav-hazirlama/main/guncelleme/desktop.json okur.
 //   version > kurulu sürüm ve minBase ≤ kurulu TAM sürüm ise "Yeni sürüm hazır" der ve .sinavyama dosyasını indirir;
-//   dosya Ed25519 ile imzalı olmalıdır (boot.js'teki açık anahtar), imzasızı KURMAZ. İmza anahtarı yalnız geliştiricinin
-//   bilgisayarındadır (C:\Claude Programlarım\_Anahtarlar\SinavHazirlama) — bu yüzden imzasız köprü yapılmaz.
+//   dosya Ed25519 ile imzalı olmalıdır (boot.js'teki açık anahtar), imzasızı KURMAZ. İmza anahtarı yalnız kullanıcının
+//   bilgisayarındadır (geliştiricinin bilgisayarındaki anahtar klasörü) — bu yüzden imzasız köprü yapılmaz.
 //   version > kurulu sürüm ama minBase > kurulu TAM sürüm ise HİÇBİR ŞEY İNDİRMEZ, yalnız şu uyarıyı gösterir
 //   (açılışta 15 sn, Güncelle düğmesinde de):  "Sürüm {v} için programın tam kurulumu (.exe) bir kez yapılmalı."
 //   ({v} = desktop.json "version" alanı, olduğu gibi). Sürüm karşılaştırması noktalara bölüp parseInt yapar:
