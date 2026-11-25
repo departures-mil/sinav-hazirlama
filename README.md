@@ -20,8 +20,9 @@ eşitlenir; **kayıtlar bu depoda bulunmaz**.
 ## Yeni sürüm
 1. Kodu değiştir, `node tools/surum.js X.Y.Z` (package.json + `renderer/surum.js`), `release-notes.json`'a tr/en/ar notları yaz.
 2. `npm test` (duman testi + Wi-Fi eşitleme testi + Electron açılış testi; Linux'ta xvfb).
-3. main'e gönder; GitHub → Actions → **release** → *Run workflow* (main). CI: test → Windows derlemesi → ortak
-   `reusable-release.yml` (son 5 sürüme yama + latest.json). Testler geçmezse yayın olmaz.
+3. main'e gönder. **1.10.4'ten beri yayın kendiliğinden başlar**: release.yml her main gönderiminde `v<sürüm>` yayını var mı
+   bakar, yoksa test → Windows derlemesi → ortak `reusable-release.yml` (son 5 sürüme yama + latest.json). Testler geçmezse
+   yayın olmaz. Yedek yollar: Actions → release → *Run workflow* (main) ya da `vX.Y.Z` etiketi.
 
 ## Eşitleme (hiçbir veri silinmez)
 - **Bulut**: kullanıcının KENDİ Firebase'i (Ayarlar → Eşitleme ya da üstteki Bulut). Buluttan "Arşivle" sınavı silmez
@@ -44,3 +45,17 @@ eşitlenir; **kayıtlar bu depoda bulunmaz**.
 - **Arşiv**: `renderer/sozluk.js` (351 havacılık terimi + ~1400 genel kelime, en/tr/ar), `renderer/bank-gen.js` (sözlük ve dil bilgisi tablolarından ~6100 üretilmiş soru: kelime, terim, eş/zıt anlam, zamanlar, edilgen, edat, kiplik, koşul…), `renderer/bank-data2.js` (90 el yazımı üç dilli İHA sorusu). Arşiv aramasında alt konu etiketleri.
 - **Yapay zeka** (`renderer/ai.js`): Ayarlar > Yapay Zeka'da kullanıcının KENDİ anahtarı (Gemini/OpenAI/Anthropic/OpenRouter/Groq). Üst çubukta "🤖 Danışman" sohbeti (İHA/havacılık, İngilizce öğretimi, sınav tasarımı uzmanı; üç dil). Soru üretme sekmesi (konu + seviye + hedef kitle → üç dilli sorular, arşive kaydedilir). İnternet yokken "çevrimdışı danışman" sözlük ve arşivden yanıt verir. Kullanım, Kullanım Limitleri kartında sayılır.
 - **Çeviri motoru** (`renderer/ceviri.js`): çeviri belleği (cihazda) → sözlük tam eşleşme → çevrimiçi (yapay zeka → Google → MyMemory) → çevrimdışı öbek/kelime çevirisi. Havacılık terimleri sözlükten zorlanır; kelime testi sözlük denetimi çevrimdışı da çalışır.
+
+## 1.10.4 — kalite ve sınıf araçları (`renderer/ek-plus.js`, kenar çubuğu "Gelişmiş")
+- **Onay akışı** (`q.durum`: t taslak / k kontrol edildi / o onaylı; boş = eski soru, onaylı sayılır). Ayar açıksa çıktı, kitapçık,
+  optik form ve çevrimiçi sınava yalnız onaylılar girer (`EK.onayMatch`; app.js buildModel ve ek-sinif examQsFor).
+- **Gözden geçir işareti** `q.inceleme {n: analiz|revizyon|elle, t, not}` — soru değiştirilmez; kartta ⚠ düğmesiyle kalkar.
+- **Kaynak revizyonu** `q.rev` + cihazda `ek.revler`; revizyon değişince o kaynağa dayanan sorular işaretlenir.
+- **Madde analizi**: işlemeyen çeldirici (≥10 cevapta <%5), ters / düşük ayırt edicilik ve çok zor soru işareti; "Uygula" işaretler.
+- **Tekrar kontrolü**: öğrenciye giden çıktı / kitapçık / canlı sınavdaki sorular `ek.kullanim`'a (metin parmak izi) yazılır;
+  kartta 🕘 son kullanım; müfredat planı son N günde kullanılanları almaz.
+- **Müfredat planı**: konu (EASA Part-66 / ATPL hazırları) + zorluk + adet → yeni sınav (açık sınav önce yedeklenir).
+- **Kitapçık A/B/C/D**: soru + şık sırası; tüm anahtarlar tek PDF; optik formlarda `formlar[id].perm` (gösterilen şık → asıl şık).
+- **Terim sözlüğü** (`ek.sozluk`): `SOZLUK.AV`'nin önüne eklenir → çevrimdışı, Google düzeltmesi ve yapay zekâ isteminde öncelikli.
+- **Karne / başarı belgesi** (analiz penceresi), **toplu soru aktarma** (Excel/Word/CSV, başlık satırı tr/en/ar), **yedek**:
+  30 dk'da bir (değiştiyse) + `yedek:dogrula` (yalnız okur). **Canlı sınav güvenli mod**: `/api/olay`, öğretmen panelinde ⚠ sayısı.

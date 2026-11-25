@@ -44,7 +44,8 @@ function createCanli({ dir, pageHtml, scanHtml, onChange, onScan, log }) {
     return {
       id: s.id, title: s.title, code: s.code, open: s.open, dur: s.dur, createdAt: s.createdAt, examId: s.examId, n: s.questions.length,
       urls: L.port ? addrs().map((a) => `http://${a}:${L.port}/`) : [], port: L.port,
-      students: Object.values(s.students).map((x) => ({ id: x.id, ad: x.ad, no: x.no, start: x.start, end: x.end, done: !!x.done, answers: x.answers, last: x.last, allowRe: !!x.allowRe, ip: x.ip })),
+      students: Object.values(s.students).map((x) => ({ id: x.id, ad: x.ad, no: x.no, start: x.start, end: x.end, done: !!x.done, answers: x.answers, last: x.last, allowRe: !!x.allowRe, ip: x.ip, olay: x.olay ? x.olay.n : 0, olayLog: x.olay ? x.olay.log.slice(-10) : [] })),
+      guvenli: !!s.guvenli,
     };
   };
   const changed = (now) => { save(!!now); if (onChange) onChange(pub()); };
@@ -90,7 +91,7 @@ function createCanli({ dir, pageHtml, scanHtml, onChange, onScan, log }) {
     if (req.method === 'GET' && u.pathname === '/okut') return send(res, 200, scanHtml(), 'text/html; charset=utf-8');
     if (req.method === 'GET' && u.pathname === '/api/bilgi') {
       if (!s) return send(res, 200, { ok: false, error: 'NO_EXAM' });
-      return send(res, 200, { ok: true, title: s.title, dur: s.dur, n: s.questions.length, open: s.open, langs: s.langs, lang: s.lang });
+      return send(res, 200, { ok: true, title: s.title, dur: s.dur, n: s.questions.length, open: s.open, langs: s.langs, lang: s.lang, guvenli: !!s.guvenli });
     }
     if (req.method !== 'POST') return send(res, 404, { ok: false });
     let j;
@@ -112,7 +113,7 @@ function createCanli({ dir, pageHtml, scanHtml, onChange, onScan, log }) {
         const st = Object.values(s.students).find((x) => x.token === j.token);
         if (!st) return send(res, 200, { ok: false, error: 'TOKEN' });
         finishIfLate(st);
-        return send(res, 200, { ok: true, token: st.token, ad: st.ad, no: st.no, done: !!st.done, left: s.dur ? timeLeft(st) : null, paper: st.done ? [] : paperFor(st), answers: st.order.map((qi) => shownOpt(st, qi, st.answers[s.questions[qi].id])), title: s.title, lang: s.lang, langs: s.langs, letters: s.letters });
+        return send(res, 200, { ok: true, token: st.token, ad: st.ad, no: st.no, done: !!st.done, left: s.dur ? timeLeft(st) : null, paper: st.done ? [] : paperFor(st), answers: st.order.map((qi) => shownOpt(st, qi, st.answers[s.questions[qi].id])), title: s.title, lang: s.lang, langs: s.langs, letters: s.letters, guvenli: !!s.guvenli });
       }
       if (String(j.code || '').trim() !== s.code) return send(res, 200, { ok: false, error: 'CODE' });
       if (!s.open) return send(res, 200, { ok: false, error: 'CLOSED' });
@@ -131,7 +132,7 @@ function createCanli({ dir, pageHtml, scanHtml, onChange, onScan, log }) {
         };
       }
       changed(true);
-      return send(res, 200, { ok: true, token: st.token, ad: st.ad, no: st.no, done: !!st.done, left: s.dur ? timeLeft(st) : null, paper: st.done ? [] : paperFor(st), answers: st.order.map((qi) => shownOpt(st, qi, st.answers[s.questions[qi].id])), title: s.title, lang: s.lang, langs: s.langs, letters: s.letters });
+      return send(res, 200, { ok: true, token: st.token, ad: st.ad, no: st.no, done: !!st.done, left: s.dur ? timeLeft(st) : null, paper: st.done ? [] : paperFor(st), answers: st.order.map((qi) => shownOpt(st, qi, st.answers[s.questions[qi].id])), title: s.title, lang: s.lang, langs: s.langs, letters: s.letters, guvenli: !!s.guvenli });
     }
     const st = j.token ? Object.values(s.students).find((x) => x.token === j.token) : null;
     if (!st) return send(res, 200, { ok: false, error: 'TOKEN' });
@@ -150,6 +151,16 @@ function createCanli({ dir, pageHtml, scanHtml, onChange, onScan, log }) {
       if (j.final) { st.done = true; st.end = Date.now(); }
       changed(!!j.final);
       return send(res, 200, { ok: true, done: st.done, left: s.dur ? timeLeft(st) : null });
+    }
+    // 1.10.4 güvenli mod: öğrencinin sınav sayfasından çıkması / tam ekranı kapatması kaydedilir (öğretmen panelinde ⚠ sayısı)
+    if (u.pathname === '/api/olay') {
+      const k = ['gizli', 'cikis', 'tam'].includes(j.k) ? j.k : 'gizli';
+      if (!st.done && k !== 'tam') {
+        st.olay = st.olay || { n: 0, log: [] };
+        st.olay.n++; st.olay.log.push({ t: Date.now(), k }); if (st.olay.log.length > 50) st.olay.log = st.olay.log.slice(-50);
+        changed();
+      }
+      return send(res, 200, { ok: true, n: st.olay ? st.olay.n : 0 });
     }
     if (u.pathname === '/api/durum') { finishIfLate(st); return send(res, 200, { ok: true, done: st.done, left: s.dur ? timeLeft(st) : null }); }
     return send(res, 404, { ok: false });
@@ -182,7 +193,7 @@ function createCanli({ dir, pageHtml, scanHtml, onChange, onScan, log }) {
         L.s = {
           id: new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19) + '-' + rnd(3), createdAt: Date.now(), examId: String(o.examId || ''),
           title: String(o.title || '').slice(0, 200), code: code4(), open: true, dur: Math.max(0, Math.min(600, +o.dur || 0)),
-          shuffleQ: !!o.shuffleQ, shuffleO: !!o.shuffleO, lang: o.lang || 'tr', langs: o.langs || ['tr'], letters: o.letters || {},
+          shuffleQ: !!o.shuffleQ, shuffleO: !!o.shuffleO, guvenli: o.guvenli !== false, lang: o.lang || 'tr', langs: o.langs || ['tr'], letters: o.letters || {},
           questions: qs, key: o.key || {}, students: {},
         };
       }

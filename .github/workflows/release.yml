@@ -1,19 +1,45 @@
 # Sınav Hazırlama — test → Windows derlemesi (NSIS kurulum + app.asar) → GitHub Release (ortak çekirdek, delta yamalar).
-# Yayın: package.json sürümünü değiştirin (node tools/surum.js X.Y.Z), main'e birleştirin, sonra
-# Actions → release → "Run workflow" (main) ya da `git tag vX.Y.Z && git push --tags`. Etiket v<package.json sürümü> olur.
+# Yayın (1.10.4+): package.json sürümünü değiştirin (node tools/surum.js X.Y.Z) ve main'e gönderin — o sürümün
+# GitHub Release'i yoksa yayın KENDİLİĞİNDEN başlar (elle Run workflow gerekmez). Yedek yollar: Actions → release →
+# "Run workflow" (main) ya da `git tag vX.Y.Z && git push --tags`. Etiket v<package.json sürümü> olur.
 # Entegrasyon dallarında (ortak-cekirdek-*) yalnız test + derleme çalışır. Testler geçmezse derleme ve yayın olmaz.
 name: release
 on:
   push:
     tags: ['v*']
-    branches: ['ortak-cekirdek-*']
+    branches: ['ortak-cekirdek-*', 'main']
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  # main'e gönderimde: bu sürümün yayını zaten varsa hiçbir şey yapılmaz (aynı sürüm iki kez yayınlanmaz)
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.g.outputs.go }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: g
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="$(node -p "require('./package.json').version")"
+          if [ "${GITHUB_REF}" = "refs/heads/main" ] && [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            if gh release view "v$v" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo "v$v zaten yayında; atlanıyor"; echo "go=false" >> "$GITHUB_OUTPUT"; else echo "v$v yayında değil; yayınlanacak"; echo "go=true" >> "$GITHUB_OUTPUT"; fi
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
+    needs: gate
+    if: needs.gate.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +57,8 @@ jobs:
           [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "::error::etiket ${GITHUB_REF_NAME} ≠ package.json v$v"; exit 1; }
 
   build:
-    needs: test
+    needs: [gate, test]
+    if: needs.gate.outputs.go == 'true'
     runs-on: windows-latest
     outputs:
       version: ${{ steps.ver.outputs.version }}
@@ -63,8 +90,8 @@ jobs:
           retention-days: 5
 
   release:
-    needs: [test, build]
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    needs: [gate, test, build]
+    if: needs.gate.outputs.go == 'true' && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main')
     permissions:
       contents: write
     uses: departures-mil/ortak-cekirdek/.github/workflows/reusable-release.yml@main

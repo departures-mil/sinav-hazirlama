@@ -164,7 +164,7 @@
   }
   function examQsFor(o) {
     const a = A();
-    let qs = a.liveQs().filter((q) => (!o.tag || (o.tag === 'none' ? !a.tagOf(q) : a.tagOf(q) === o.tag)) && EK.konuMatch(q, o.konu || ''));
+    let qs = a.liveQs().filter((q) => (!o.tag || (o.tag === 'none' ? !a.tagOf(q) : a.tagOf(q) === o.tag)) && EK.konuMatch(q, o.konu || '') && (!EK.onayMatch || EK.onayMatch(q)));
     return qs;
   }
   async function omrFormModal(o = {}) {
@@ -250,14 +250,15 @@
     const d = await sonucRead(examId);
     const f = d.formlar[formId];
     const ans = {};
-    f.qids.forEach((id, i) => { ans[id] = r.answers[i]; });
+    // kitapçık formu: işaretlenen (karışık) şık → asıl şık
+    f.qids.forEach((id, i) => { const v = r.answers[i]; ans[id] = f.perm && Array.isArray(f.perm[i]) && v >= 0 && f.perm[i][v] != null ? f.perm[i][v] : v; });
     const roster = rosterOf(d);
     const rec = { id: Math.random().toString(36).slice(2, 10), t: Date.now(), formId, no: r.no, ad: roster.get(r.no) || '', answers: ans, thumb, file: name || '' };
     d.okumalar.filter((x) => x.formId === formId && x.no && x.no === r.no && !x.gizli).forEach((x) => { x.gizli = true; x.yerine = rec.id; });
     d.okumalar.push(rec);
     await sonucWrite(d);
     const key = keyOf(a.exam, f.qids);
-    const dd = f.qids.reduce((s, id, i) => s + (key[i] >= 0 && ans[id] === key[i] ? 1 : 0), 0);
+    const dd = f.qids.reduce((s2, id, i) => s2 + (key[i] >= 0 && ans[id] === key[i] ? 1 : 0), 0);
     return { rec, d: dd, n: f.qids.length };
   }
   function rosterOf(d) {
@@ -275,7 +276,7 @@
     const body = document.createElement('div');
     const forms = Object.entries(d.formlar).sort((x, y) => y[1].t - x[1].t);
     if (!forms.length) { a.modal({ title: t('omrTitle'), body: `<p class="help">${esc(t('omrNoForm'))}</p>`, buttons: [{ label: t('ekOmrForm'), cls: 'primary', onClick: (c) => { c(); omrFormModal(); } }, { label: t('close'), onClick: (c) => c() }] }); return; }
-    body.innerHTML = `<div class="row"><label>${esc(t('omrForm'))} <select class="in" id="orForm" style="width:auto">${forms.map(([id, f]) => `<option value="${id}">${id} · ${f.qids.length} ${esc(t('lbl_question'))} · ${esc(fmtD(f.t))}</option>`).join('')}</select></label>
+    body.innerHTML = `<div class="row"><label>${esc(t('omrForm'))} <select class="in" id="orForm" style="width:auto">${forms.map(([id, f]) => `<option value="${id}">${id}${f.kitapcik ? ' · ' + esc(t('plKitapcik')) + ' ' + esc(f.kitapcik) : ''} · ${f.qids.length} ${esc(t('lbl_question'))} · ${esc(fmtD(f.t))}</option>`).join('')}</select></label>
       <button class="btn primary" id="orFile">${esc(t('omrRead'))}</button><button class="btn" id="orPhone">${esc(t('omrPhone'))}</button><button class="btn" id="orAn">${esc(t('anBtn'))}</button>
       <input type="file" id="orIn" multiple accept="image/*,application/pdf" style="display:none"></div>
       <div id="orPhoneBox"></div><div class="bkinfo" id="orInfo"></div><div id="orList"></div>`;
@@ -367,7 +368,7 @@
     const langs = LK.filter((k) => qs.length && qs.filter((q) => (q.text[k] || '').trim()).length >= qs.length * 0.9);
     const lang = langs.includes(o.lang || a.CL()) ? (o.lang || a.CL()) : (langs[0] || a.CL());
     return {
-      examId: ex.id, title: a.examName(ex), dur: o.dur || 0, shuffleQ: !!o.shuffleQ, shuffleO: !!o.shuffleO, lang, langs: langs.length ? langs : [lang],
+      examId: ex.id, title: a.examName(ex), dur: o.dur || 0, shuffleQ: !!o.shuffleQ, shuffleO: !!o.shuffleO, guvenli: o.guvenli !== false, lang, langs: langs.length ? langs : [lang],
       letters: window.LETTERS,
       questions: qs.map((q) => ({ id: q.id, text: q.text, img: q.img || '', options: q.options.slice(0, nOpt), oimg: q.oimg ? q.oimg.slice(0, nOpt) : null })),
       key: Object.fromEntries(qs.map((q) => [q.id, a.isAnswered(q) ? q.correct : -1])),
@@ -380,22 +381,24 @@
     let off = null;
     const L = a.letters();
     const setup = () => {
-      const p = a.prefs.live || { dur: 30, shQ: true, shO: true };
+      const p = { dur: 30, shQ: true, shO: true, guv: true, ...(a.prefs.live || {}) };
       body.innerHTML = `<p class="help">${esc(t('liveHelp'))}</p>
         <div class="row"><label>${esc(t('liveDur'))} <input class="in" type="number" id="lvDur" min="0" max="600" value="${p.dur}" style="width:80px"></label>
-          <label class="chk"><input type="checkbox" id="lvQ"${p.shQ ? ' checked' : ''}> ${esc(t('liveShQ'))}</label><label class="chk"><input type="checkbox" id="lvO"${p.shO ? ' checked' : ''}> ${esc(t('liveShO'))}</label></div>
+          <label class="chk"><input type="checkbox" id="lvQ"${p.shQ ? ' checked' : ''}> ${esc(t('liveShQ'))}</label><label class="chk"><input type="checkbox" id="lvO"${p.shO ? ' checked' : ''}> ${esc(t('liveShO'))}</label>
+          <label class="chk" title="${esc(t('plGuvTip'))}"><input type="checkbox" id="lvG"${p.guv !== false ? ' checked' : ''}> 🔒 ${esc(t('plGuv'))}</label></div>
         <div class="row"><label>${esc(t('liveLangs'))} <select class="in" id="lvLang" style="width:auto">${LK.map((k) => `<option value="${k}">${window.LANGS[k]}</option>`).join('')}</select></label>
           <label>${esc(t('outTag'))} <select class="in" id="lvTag" style="width:auto"><option value="">${esc(t('filterAll'))}</option>${a.tagKeys().map((k) => `<option value="${k}">${esc(a.tagName(k))}</option>`).join('')}</select></label>
           <label>${esc(t('ekKonu'))} <select class="in" id="lvKonu" style="width:auto">${EK.konuOptions(a.liveQs())}</select></label></div>
         <div class="row"><button class="btn primary" id="lvGo">${esc(t('liveStart'))}</button><span class="bad" id="lvErr"></span></div>`;
       $('#lvLang', body).value = a.CL();
       $('#lvGo', body).onclick = async () => {
-        const o = { dur: Math.max(0, +$('#lvDur', body).value || 0), shuffleQ: $('#lvQ', body).checked, shuffleO: $('#lvO', body).checked, lang: $('#lvLang', body).value };
-        a.prefs.live = { dur: o.dur, shQ: o.shuffleQ, shO: o.shuffleO }; a.savePrefs();
+        const o = { dur: Math.max(0, +$('#lvDur', body).value || 0), shuffleQ: $('#lvQ', body).checked, shuffleO: $('#lvO', body).checked, guvenli: $('#lvG', body).checked, lang: $('#lvLang', body).value };
+        a.prefs.live = { dur: o.dur, shQ: o.shuffleQ, shO: o.shuffleO, guv: o.guvenli }; a.savePrefs();
         o.qs = examQsFor({ tag: $('#lvTag', body).value, konu: $('#lvKonu', body).value });
         if (!o.qs.length) { $('#lvErr', body).textContent = t('nothingToOutput'); return; }
         const r = await api().canli.start(livePayload(o));
         if (!r.ok) { $('#lvErr', body).textContent = t('liveErr', { e: r.error }); return; }
+        if (EK.markUsed) EK.markUsed(o.qs.map((q) => q.id), a.examName(a.exam));
         show(r.data);
       };
     };
@@ -414,11 +417,11 @@
           <div class="row"><span class="pill ${s.open ? 'ok' : 'bad'}">${esc(t(s.open ? 'liveOpen' : 'liveClosed'))}</span><button class="btn" id="lvTog">${esc(t('liveToggle'))}</button><button class="btn" id="lvFin">${esc(t('liveFinish'))}</button><button class="btn" id="lvAn">${esc(t('anBtn'))}</button><button class="btn" id="lvStop">${esc(t('liveStop'))}</button></div>
           <p class="muted">${esc(t('liveFirewall'))}</p></div></div>
         <h4>${esc(t('liveStudents', { n: stu.length }))}</h4>
-        ${stu.length ? `<table class="ortable"><thead><tr><th>${esc(t('omrNo'))}</th><th>${esc(t('omrName'))}</th><th></th><th>${esc(t('omrScore'))}</th><th></th></tr></thead><tbody>${stu.map((x) => {
+        ${stu.length ? `<table class="ortable"><thead><tr><th>${esc(t('omrNo'))}</th><th>${esc(t('omrName'))}</th><th></th><th>${esc(t('omrScore'))}</th>${s.guvenli ? `<th title="${esc(t('plGuvTip'))}">🔒</th>` : ''}<th></th></tr></thead><tbody>${stu.map((x) => {
           const na = Object.keys(x.answers).length;
           const c = Object.entries(x.answers).filter(([id, v]) => key[id] >= 0 && key[id] === v).length;
           const left = s.dur && !x.done ? Math.max(0, Math.ceil((x.start + s.dur * 60000 - now) / 60000)) : null;
-          return `<tr><td>${esc(x.no)}</td><td dir="auto">${esc(x.ad)}</td><td>${esc(t(x.done ? 'liveState_done' : 'liveState_on'))} · ${esc(t('liveAns', { a: na, n: s.n }))}${left != null ? ' · ' + esc(t('liveLeft', { m: left })) : ''}</td><td><b>${c}</b>/${s.n}</td><td>${x.done ? `<button class="btn mini" data-ro="${esc(x.id)}">${esc(t('liveReopen'))}</button>` : `<button class="btn mini" data-re="${esc(x.id)}">${esc(t('liveRe'))}</button>`}</td></tr>`;
+          return `<tr><td>${esc(x.no)}</td><td dir="auto">${esc(x.ad)}</td><td>${esc(t(x.done ? 'liveState_done' : 'liveState_on'))} · ${esc(t('liveAns', { a: na, n: s.n }))}${left != null ? ' · ' + esc(t('liveLeft', { m: left })) : ''}</td><td><b>${c}</b>/${s.n}</td>${s.guvenli ? `<td>${x.olay ? `<span class="bad" title="${esc((x.olayLog || []).map((o) => fmtD(o.t) + ' · ' + t('plOlay_' + o.k)).join('\n'))}">⚠ ${x.olay}</span>` : '✓'}</td>` : ''}<td>${x.done ? `<button class="btn mini" data-ro="${esc(x.id)}">${esc(t('liveReopen'))}</button>` : `<button class="btn mini" data-re="${esc(x.id)}">${esc(t('liveRe'))}</button>`}</td></tr>`;
         }).join('')}</tbody></table>` : `<div class="empty">${esc(t('liveNoStud'))}</div>`}`;
       window.__canliRoster = s.students;
       $('#lvTog', body).onclick = async () => show((await api().canli.setOpen(!s.open)).data);
@@ -487,7 +490,10 @@
       const p = o.n ? o.d / o.n : 0;
       const disc = o.tn && o.bn && studs.length >= 6 ? o.tc / o.tn - o.bc / o.bn : null;
       let lure = -1, lv = 0; o.dist.forEach((v, k) => { if (k !== key(q.id) && v > lv) { lv = v; lure = k; } });
-      return { q, ...o, p, disc, lure, lureP: o.n ? lv / o.n : 0, sugg: p >= 0.8 ? 'k' : p >= 0.4 ? 'o' : 'z' };
+      // 1.10.4: işlemeyen çeldirici (≥10 cevapta %5'ten az seçilen yanlış şık) ve gözden geçirilecek soru işareti
+      const nf = o.n >= 10 ? o.dist.slice(0, nOpt).map((v, k) => (k !== key(q.id) && v / o.n < 0.05 ? k : -1)).filter((k) => k >= 0) : [];
+      const flag = o.n >= 5 && ((disc != null && disc < 0.15) || p < 0.2) ? (disc != null && disc < 0) ? 'ters' : p < 0.2 ? 'zor' : 'ayirt' : '';
+      return { q, ...o, p, disc, lure, lureP: o.n ? lv / o.n : 0, sugg: p >= 0.8 ? 'k' : p >= 0.4 ? 'o' : 'z', nf, flag };
     });
     const groupBy = (f) => {
       const m = new Map();
@@ -511,7 +517,7 @@
     if (weak.length) h += `<h4>${esc(t('anWeak'))}</h4><ul class="anweak">${weak.map((x) => `<li><b>${esc(t('question'))} ${qn(x.q)}</b> · %${pctS(x.p)} — <span dir="auto">${esc(pickL(x.q.text, cl).slice(0, 120))}</span>${x.lure >= 0 ? ` · ${esc(t('anLure', { l: L[x.lure], p: pctS(x.lureP) }))}` : ''}${forPrint ? '' : ` <button class="btn mini" data-go="${x.q.id}">${esc(t('anGo'))}</button>`}</li>`).join('')}</ul>`;
     h += `<h4>${esc(t('anKonu'))}</h4><table class="antable"><thead><tr><th>${esc(t('ekKonu'))}</th><th>${esc(t('anQs'))}</th><th>${esc(t('anP'))}</th></tr></thead><tbody>${R.konu.map((x) => `<tr><td dir="auto">${esc(x.k)}</td><td>${x.q}</td><td>${bar(x.p)}</td></tr>`).join('')}</tbody></table>`;
     if (R.tag.length > 1) h += `<h4>${esc(t('anTag'))}</h4><table class="antable"><tbody>${R.tag.map((x) => `<tr><td>${esc(x.k)}</td><td>${x.q}</td><td>${bar(x.p)}</td></tr>`).join('')}</tbody></table>`;
-    h += `<h4>${esc(t('anQs'))}</h4><table class="antable"><thead><tr><th>#</th><th></th><th>${esc(t('anP'))}</th><th>${esc(t('anDist'))}</th><th>${esc(t('anDisc'))}</th><th>${esc(t('anSugg'))}</th></tr></thead><tbody>${R.qs.map((x) => `<tr><td><b>${qn(x.q)}</b></td><td class="qt" dir="auto">${esc(pickL(x.q.text, cl).slice(0, 90))}</td><td>${bar(x.p)}<br><small>${x.d}/${x.n}</small></td><td class="dist">${x.dist.slice(0, a.S().optionCount).map((v, k) => `<span class="${k === x.q.correct ? 'c' : ''}">${L[k]}:${v}</span>`).join(' ')}${x.blank ? ` <span>–:${x.blank}</span>` : ''}</td><td>${x.disc == null ? '—' : x.disc.toFixed(2)}${x.disc != null && x.disc < 0.15 ? ` <span class="bad" title="${esc(t('anDiscLow'))}">⚠</span>` : ''}</td><td>${esc(t('ekZor_' + x.sugg))}${x.q.zor && x.q.zor !== x.sugg ? ` <small>(${esc(t('ekZor_' + x.q.zor))})</small>` : ''}</td></tr>`).join('')}</tbody></table>`;
+    h += `<h4>${esc(t('anQs'))}</h4><table class="antable"><thead><tr><th>#</th><th></th><th>${esc(t('anP'))}</th><th>${esc(t('anDist'))}</th><th>${esc(t('anDisc'))}</th><th>${esc(t('plNf'))}</th><th>${esc(t('anSugg'))}</th></tr></thead><tbody>${R.qs.map((x) => `<tr><td><b>${qn(x.q)}</b></td><td class="qt" dir="auto">${esc(pickL(x.q.text, cl).slice(0, 90))}</td><td>${bar(x.p)}<br><small>${x.d}/${x.n}</small></td><td class="dist">${x.dist.slice(0, a.S().optionCount).map((v, k) => `<span class="${k === x.q.correct ? 'c' : ''}">${L[k]}:${v}</span>`).join(' ')}${x.blank ? ` <span>–:${x.blank}</span>` : ''}</td><td>${x.disc == null ? '—' : x.disc.toFixed(2)}${x.disc != null && x.disc < 0.15 ? ` <span class="bad" title="${esc(t('anDiscLow'))}">⚠</span>` : ''}</td><td>${x.nf.length ? `<span class="bad" title="${esc(t('plNfTip'))}">${x.nf.map((k) => L[k]).join(', ')}</span>` : '—'}${x.flag ? `<br><small class="bad">${esc(t('plFlag_' + x.flag))}</small>` : ''}</td><td>${esc(t('ekZor_' + x.sugg))}${x.q.zor && x.q.zor !== x.sugg ? ` <small>(${esc(t('ekZor_' + x.q.zor))})</small>` : ''}</td></tr>`).join('')}</tbody></table>`;
     h += `<h4>${esc(t('anStud'))}</h4><table class="antable"><thead><tr><th>${esc(t('anRank'))}</th><th>${esc(t('omrNo'))}</th><th>${esc(t('omrName'))}</th><th>${esc(t('omrScore'))}</th><th>${esc(t('omrWrong'))}</th><th>${esc(t('omrBlank'))}</th><th>${esc(t('anPct'))}</th><th>${esc(t('anSrc'))}</th></tr></thead><tbody>${R.studs.map((s, i) => `<tr><td>${i + 1}</td><td>${esc(s.no)}</td><td dir="auto">${esc(s.ad)}</td><td><b>${s.c}</b>/${s.n}</td><td>${s.w}</td><td>${s.b}</td><td>${bar(s.p)}</td><td>${esc(t(s.src === 'omr' ? 'anOmr' : 'anLive'))}</td></tr>`).join('')}</tbody></table>`;
     return h;
   }
@@ -530,7 +536,7 @@
       R = analyse(ex, rows);
       body.innerHTML = `<p class="help">${esc(t('anHelp'))}</p>
         <div class="row"><b>${esc(t('anSources'))}:</b>${srcs.map((s) => `<label class="chk"><input type="checkbox" data-s="${esc(s.id)}"${sel.has(s.id) ? ' checked' : ''}> ${esc(s.label)}</label>`).join('')}</div>
-        <div class="row"><button class="btn primary" id="anApply" title="${esc(t('anApplyTip', { n: minN }))}">${esc(t('anApply'))}</button><button class="btn" id="anPdf">${esc(t('anPdf'))}</button><button class="btn" id="anCsv">${esc(t('anCsv'))}</button></div>
+        <div class="row"><button class="btn primary" id="anApply" title="${esc(t('anApplyTip', { n: minN }))}">${esc(t('anApply'))}</button><button class="btn" id="anPdf">${esc(t('anPdf'))}</button><button class="btn" id="anCsv">${esc(t('anCsv'))}</button><button class="btn" id="anKarne">🎓 ${esc(t('plKarne'))}</button><button class="btn" id="anBelge">📜 ${esc(t('plBelge'))}</button></div>
         <div class="anrep">${reportHtml(ex, R, false)}</div>`;
       body.querySelectorAll('[data-s]').forEach((c) => { c.onchange = () => { if (c.checked) sel.add(c.dataset.s); else sel.delete(c.dataset.s); a.prefs.anSel = [...sel]; a.savePrefs(); render(); }; });
       body.querySelectorAll('[data-go]').forEach((b) => { b.onclick = () => { m.close(); a.setTab('test'); a.scrollToQ(b.dataset.go); }; });
@@ -539,6 +545,8 @@
         R.qs.forEach((x) => {
           x.q.ist = { n: x.n, d: x.d, t: Date.now() };
           if (x.n >= minN && (!x.q.zor || x.q.zorOto) && x.q.zor !== x.sugg) { x.q.zor = x.sugg; x.q.zorOto = true; n++; }
+          // sorunlu soru: "gözden geçir" işareti (soru silinmez, değiştirilmez)
+          if (x.flag && !(x.q.inceleme && x.q.inceleme.n === 'analiz')) { x.q.inceleme = { n: 'analiz', t: Date.now(), not: t('plFlag_' + x.flag) + (x.nf.length ? ' · ' + t('plNf') + ': ' + x.nf.map((k) => a.letters()[k]).join(', ') : '') }; n++; }
         });
         a.renderList(); a.changed();
         a.toast(t('anApplied', { n }), 'ok', [{ label: t('undo'), onClick: () => a.undo() }]);
@@ -552,6 +560,8 @@
         const r = await api().makePdf({ html, pageNumbers: true, footerLabel: '', margins: { top: 1.5, bottom: 1.5, left: 1.5, right: 1.5 }, action: 'save', fileName: (a.examName(ex) || 'sinav').replace(/[\\/:*?"<>|]/g, '').slice(0, 50) + '-analiz', noTemplate: true });
         if (r && r.path) a.toast(t('anSaved', { p: r.path }), 'ok');
       };
+      $('#anKarne', body).onclick = () => EK.karneler && EK.karneler(ex, R);
+      $('#anBelge', body).onclick = () => EK.belgeler && EK.belgeler(ex, R);
       $('#anCsv', body).onclick = async () => {
         const L = a.letters();
         const qcols = R.qs.map((x) => x.q);
@@ -574,7 +584,7 @@
   try { if (window.api && window.api.canli) window.api.canli.onScan((x) => onScan(x)); } catch { /* yok */ }
 
   EK._omrForm = omrFormModal;
-  Object.assign(EK, { omrReadModal, liveModal, analysisModal, analyse, formHtml, livePayload });
+  Object.assign(EK, { omrReadModal, liveModal, analysisModal, analyse, formHtml, livePayload, sonucRead, sonucWrite, examQsFor });
   EK.addSide('btnEkLive', () => t('liveBtn'), liveModal);
   EK.addSide('btnEkOmr', () => t('omrBtn'), () => omrFormModal());
   EK.addSide('btnEkAn', () => t('anBtn'), analysisModal);

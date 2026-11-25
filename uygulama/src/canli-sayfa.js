@@ -43,6 +43,9 @@ const I18N = {
   e_DONE: ['Bu numarayla sınav zaten teslim edilmiş.', 'An exam has already been submitted with this number.', 'سُلّم اختبار بهذا الرقم بالفعل.'], e_NO_EXAM: ['Şu anda açık sınav yok.', 'No exam is open right now.', 'لا يوجد اختبار مفتوح حالياً.'],
   e_SLOW: ['Çok fazla deneme. Bir dakika bekleyin.', 'Too many attempts. Wait a minute.', 'محاولات كثيرة. انتظر دقيقة.'], e_NET: ['Bilgisayara ulaşılamadı. Aynı Wi-Fi ağında olduğunuzdan emin olun.', 'Cannot reach the computer. Make sure you are on the same Wi-Fi.', 'تعذّر الوصول إلى الحاسوب. تأكد أنك على شبكة Wi-Fi نفسها.'],
   lang: ['Dil', 'Language', 'اللغة'],
+  secure: ['🔒 Güvenli sınav: sınav sayfasından çıkmanız ya da tam ekranı kapatmanız öğretmeninize bildirilir.', '🔒 Secure exam: leaving the exam page or exiting full screen is reported to your teacher.', '🔒 اختبار آمن: يُبلَّغ المعلّم عند مغادرتك صفحة الاختبار أو الخروج من وضع ملء الشاشة.'],
+  fsBtn: ['⛶ Tam ekrana geç', '⛶ Go full screen', '⛶ ملء الشاشة'],
+  left: ['⚠ Sınav sayfasından çıkışınız kaydedildi ({n}).', '⚠ Leaving the exam page was recorded ({n}).', '⚠ سُجّلت مغادرتك صفحة الاختبار ({n}).'],
   // okutma
   scanTitle: ['Optik form okut', 'Scan answer sheets', 'قراءة أوراق الإجابة'],
   scanHelp: ['Formu düz bir yere koyun, dört köşedeki siyah kare görünecek şekilde yukarıdan çekin. Her fotoğraf bilgisayara gider ve hemen puanlanır.', 'Lay the sheet flat and photograph it from above so that all four black corner squares are visible. Each photo is sent to the computer and scored at once.', 'ضع الورقة على سطح مستوٍ وصوّرها من الأعلى بحيث تظهر المربعات السوداء الأربعة في الزوايا. تُرسل كل صورة إلى الحاسوب وتُصحَّح فوراً.'],
@@ -80,9 +83,15 @@ function fmt(ms){const s=Math.ceil(ms/1000),m=Math.floor(s/60);return (m>=60?Mat
 async function boot(){try{const r=await fetch('/api/bilgi');S.info=await r.json()}catch(e){S.info={ok:false,error:'NET'}}
  if(S.tok){try{const j=await post('/api/giris',{token:S.tok});if(j.ok)return enter(j);localStorage.removeItem('sh.tok');S.tok=''}catch(e){}}
  render()}
-function enter(j){S.tok=j.token;localStorage.setItem('sh.tok',j.token);S.paper=j.paper;S.ans=j.answers||[];S.done=j.done;S.left=j.left;S.t0=Date.now();S.title=j.title;S.letters=j.letters;S.cl=(j.langs||[]).includes(L)?L:(j.lang||null);
+function enter(j){S.tok=j.token;localStorage.setItem('sh.tok',j.token);S.paper=j.paper;S.ans=j.answers||[];S.done=j.done;S.left=j.left;S.t0=Date.now();S.title=j.title;S.letters=j.letters;S.cl=(j.langs||[]).includes(L)?L:(j.lang||null);S.guv=!!j.guvenli;
  const pend=localStorage.getItem('sh.pend.'+S.tok);if(pend&&!S.done){try{const a=JSON.parse(pend);if(Array.isArray(a)&&a.length===S.ans.length){S.ans=a;S.dirty=true}}catch(e){}}
  render();tick()}
+let olayT=0;
+function olay(k){if(!S.guv||S.done||!S.tok||!S.paper)return;const now=Date.now();if(k!=='tam'&&now-olayT<3000)return;olayT=now;
+ post('/api/olay',{token:S.tok,k}).then((j)=>{if(j&&j.ok&&j.n!=null&&j.n!==S.olayN){S.olayN=j.n;render()}}).catch(()=>{})}
+document.addEventListener('visibilitychange',()=>{if(document.hidden)olay('gizli')});
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&S.fsOn){S.fsOn=false;olay('cikis')}else if(document.fullscreenElement){S.fsOn=true;olay('tam')}render()});
+function goFs(){const d=document.documentElement;const f=d.requestFullscreen||d.webkitRequestFullscreen;if(f){try{const p=f.call(d);if(p&&p.catch)p.catch(()=>{})}catch(e){}}}
 function leftNow(){return S.left==null?null:Math.max(0,S.left-(Date.now()-S.t0))}
 function tick(){clearInterval(S.iv);S.iv=setInterval(()=>{const l=leftNow();const tm=$('#tm');if(l==null||S.done){tm.style.display='none';return}tm.style.display='';tm.textContent='⏱ '+fmt(l);tm.classList.toggle('low',l<120000);if(l<=0){sync(true,true)}else if(S.dirty&&Date.now()-S.lastSync>1500)sync(false)},500)}
 async function sync(final,auto){if(S.busy)return;S.busy=true;localStorage.setItem('sh.pend.'+S.tok,JSON.stringify(S.ans));
@@ -106,7 +115,9 @@ function render(){
    $('#go').disabled=true;try{const j=await post('/api/giris',{ad,no,code});if(j.ok)return enter(j);S.err=t('e_'+j.error)}catch(e){S.err=t('e_NET')}$('#go').disabled=false;$('#er').textContent=S.err};return}
  const P=S.paper,n=P.length,i=Math.min(S.cur,n-1),q=P[i],Ls=(S.letters&&S.letters[S.cl||L])||['A','B','C','D','E'];
  const st=pick(q.text);
- let h='<div class="card q"><div class="n">'+esc(t('q',{i:i+1,n}))+'</div><div class="s" dir="'+dirOf(st)+'">'+esc(st)+'</div>'+(q.img?'<img src="'+q.img+'" alt="">':'');
+ let h='';
+ if(S.guv){h+='<div class="card" style="border-color:#a16207"><div style="font-size:14px">'+esc(t('secure'))+'</div>'+(S.olayN?'<div class="err">'+esc(t('left',{n:S.olayN}))+'</div>':'')+(document.fullscreenElement||!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen)?'':'<button class="btn wide" id="fs">'+esc(t('fsBtn'))+'</button>')+'</div>'}
+ h+='<div class="card q"><div class="n">'+esc(t('q',{i:i+1,n}))+'</div><div class="s" dir="'+dirOf(st)+'">'+esc(st)+'</div>'+(q.img?'<img src="'+q.img+'" alt="">':'');
  q.options.forEach((o,k)=>{const ot=pick(o);if(!ot&&!(q.oimg&&q.oimg[k]))return;h+='<button class="opt'+(S.ans[i]===k?' on':'')+'" data-k="'+k+'"><b>'+esc(Ls[k]||String.fromCharCode(65+k))+'</b><span dir="'+dirOf(ot)+'">'+esc(ot)+'</span>'+(q.oimg&&q.oimg[k]?'<img src="'+q.oimg[k]+'" alt="">':'')+'</button>'});
  h+='<div class="row" style="margin-top:10px"><button class="btn sec" id="pv"'+(i?'':' disabled')+'>'+esc(t('prev'))+'</button><button class="btn sec" id="nx"'+(i<n-1?'':' disabled')+'>'+esc(t('next'))+'</button></div></div>';
  h+='<div class="card"><div class="nav">'+P.map((_,k)=>'<button data-g="'+k+'" class="'+(S.ans[k]>=0?'a ':'')+(k===i?'cur':'')+'">'+(k+1)+'</button>').join('')+'</div>'+
@@ -115,6 +126,7 @@ function render(){
  m.querySelectorAll('.opt').forEach((b)=>{b.onclick=()=>{const k=+b.dataset.k;S.ans[i]=S.ans[i]===k?-1:k;S.dirty=true;localStorage.setItem('sh.pend.'+S.tok,JSON.stringify(S.ans));render();sync(false)}});
  m.querySelectorAll('[data-g]').forEach((b)=>{b.onclick=()=>{S.cur=+b.dataset.g;render();window.scrollTo(0,0)}});
  $('#pv').onclick=()=>{S.cur=i-1;render();window.scrollTo(0,0)};$('#nx').onclick=()=>{S.cur=i+1;render();window.scrollTo(0,0)};
+ if($('#fs'))$('#fs').onclick=goFs;
  $('#fin').onclick=()=>{const a=S.ans.filter((x)=>x>=0).length;if(confirm(t('confirm',{a,n})))sync(true)};
 }
 boot();`;

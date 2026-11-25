@@ -2335,7 +2335,9 @@ function buildModel(variant, lang, opts = {}) {
     cols: [v.cols.ar && 'meaning', v.cols.tr && 'tr'].filter(Boolean).map((k, _, a) => ({ key: k, label: a.length > 1 ? t(k === 'tr' ? 'lbl_colTr' : 'lbl_colAr', null, lang) : t('lbl_meaning', null, lang) })),
   } : null;
   const biTest = !!(lang2 && opts.biTest);
-  const qList = opts.qList || liveQs().filter((q) => tagMatch(q, opts.tag || '') && window.EK.konuMatch(q, opts.konu || ''));
+  const qList = opts.qList || liveQs().filter((q) => tagMatch(q, opts.tag || '') && window.EK.konuMatch(q, opts.konu || '') && (!window.EK.onayMatch || window.EK.onayMatch(q)));
+  // 1.10.4: onay akışı açıksa taslak / kontrol aşamasındaki sorular çıktıya girmez (sayısı bildirilir)
+  const onayDisi = opts.qList ? 0 : liveQs().filter((q) => tagMatch(q, opts.tag || '') && window.EK.konuMatch(q, opts.konu || '') && window.EK.onayMatch && !window.EK.onayMatch(q)).length;
   const questions = sections.test ? qList.map((q, i) => ({
     n: i + 1, id: q.id, stem: pick(q.text), options: q.options.slice(0, s.optionCount).map(pick),
     stem2: biTest ? pick2(q.text) : '', options2: biTest ? q.options.slice(0, s.optionCount).map(pick2) : null,
@@ -2358,6 +2360,7 @@ function buildModel(variant, lang, opts = {}) {
     margins: effectiveMargins(),
   };
   model.missingTranslations = missing;
+  model.onayDisi = sections.test ? onayDisi : 0;
   return model;
 }
 function fileBase(variant, lang, sections) {
@@ -2383,6 +2386,9 @@ async function doOutput(variant, kind, lang, opts = {}) {
       });
     }
     if (model.missingTranslations) toast(t('missingTranslations', { n: model.missingTranslations, lang: window.LANGS[lang] }), 'warn', [], 7000);
+    if (model.onayDisi) toast(t('plOnayDisi', { n: model.onayDisi }), 'warn', [], 7000);
+    // 1.10.4: öğrenciye giden çıktıda kullanılan sorular kaydedilir (tekrar kontrolü)
+    if (variant !== 'key' && kind !== 'preview' && window.EK.markUsed) window.EK.markUsed(model.questions.map((x) => x.id), examName(exam));
     if (r && r.path) savedToast(r.path);
   } catch (e) {
     toast(t('error') + ': ' + e.message, 'err', [], 9000);

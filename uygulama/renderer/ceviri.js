@@ -134,5 +134,5 @@
     return { text: alts[0], alts: alts.slice(1), av: S.AV.includes(row) };
   }
   const stats = () => { const m = load(); return { memory: m.o.length, dictionary: (window.SOZLUK ? window.SOZLUK.AV.length + window.SOZLUK.GEN.length : 0), aviation: window.SOZLUK ? window.SOZLUK.AV.length : 0 }; };
-  window.Ceviri = { translate, dict, exact, phrase, remember, stats, avTerms, enforceGlossary };
+  window.Ceviri = { translate, dict, exact, phrase, remember, stats, avTerms, enforceGlossary, reset: () => { idx = null; } };
 })();

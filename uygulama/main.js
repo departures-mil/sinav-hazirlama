@@ -88,6 +88,25 @@ function smoke() {
           kabuk: !!(window.Kabuk && Kabuk.ready), schemes: (FC.look.schemes ? FC.look.schemes() : []),
           tabs: document.querySelectorAll('.tabs button').length, title: document.title, errors: (window.__shErrors || []).slice(0, 5)
         })`);
+        // 1.10.4 araçları: alanlar korunur, onay süzgeci, tablo aktarımı, pencereler hatasız açılır
+        r.ekplus = await mainWin.webContents.executeJavaScript(`(async () => {
+          const a = window.__app, E = window.EK, o = { side: document.querySelectorAll('.ekside [id^=btnPl]').length };
+          const q = a.newQuestion(); q.text.tr = 'Deneme'; q.options[0].tr = 'x'; q.options[1].tr = 'y'; q.correct = 0; q.durum = 't'; q.rev = 'Rev 2'; q.inceleme = { n: 'revizyon', t: 1, not: 'n' };
+          const n = a.normalizeExam({ ...a.newExam(), questions: [q] }).questions[0];
+          o.keep = n.durum === 't' && n.rev === 'Rev 2' && n.inceleme && n.inceleme.n === 'revizyon';
+          const p0 = a.prefs.onayAkisi; a.prefs.onayAkisi = true; o.onay = !E.onayMatch(n) && E.onayMatch({}) && E.onayMatch({ durum: 'o' }); a.prefs.onayAkisi = p0;
+          const pr = E.parseRows([['Soru', 'A', 'B', 'C', 'Doğru', 'Konu', 'Zorluk'], ['Stol nedir?', 'Kritik hücum açısı aşımı', 'Hız artışı', 'İtki', 'A', 'M8', 'Orta'], ['', '', '', '', '', '', ''], ['Eksik', 'a', '', '', '', '', '']]);
+          o.parse = pr && pr.qs.length === 1 && pr.qs[0].correct === 0 && pr.qs[0].zor === 'o' && pr.bad === 1;
+          o.meta = /qdurum/.test(E.metaRow(n));
+          o.fits = E.konuFits({ konu: 'M8 Temel Aerodinamik > Stol' }, 'M8 Basic Aerodynamics') && !E.konuFits({ konu: 'M9' }, 'M8');
+          const errs = [];
+          for (const f of ['onayModal', 'revModal', 'planModal', 'kitModal', 'glossaryModal', 'importModal', 'backupModal']) {
+            try { await E[f](); await new Promise((r) => setTimeout(r, 300)); } catch (e) { errs.push(f + ': ' + e.message); }
+            document.querySelectorAll('#modalRoot .modal, #modalRoot > *').forEach((m) => m.remove());
+          }
+          o.modalErrs = errs;
+          return o;
+        })()`);
         r.fullscreen = mainWin.isFullScreen(); r.appVersion = app.getVersion();
         r.errors = r.errors.concat(consoleErrors.filter((m) => !/net::|Failed to load resource|ERR_|raw\.githubusercontent|github\.com/.test(m)));
         clearTimeout(fail);
@@ -99,18 +118,52 @@ function smoke() {
 }
 
 // Açılışta otomatik kaydın yedeği (son 200 yedek tutulur); sürüm yükseltmelerinde eski veri kaybolmaz
-function backupAutosave() {
+// 1.10.4: çalışırken de 30 dakikada bir (yalnız değiştiyse) yedek; elle "Şimdi yedekle"; yedek bütünlük denetimi
+let lastBackupHash = '';
+function backupAutosave(force) {
   try {
     const src = autosavePath();
-    if (!fs.existsSync(src)) return;
+    if (!fs.existsSync(src)) return false;
+    const h = require('crypto').createHash('sha256').update(fs.readFileSync(src)).digest('hex');
+    if (!force && h === lastBackupHash) return false;
+    lastBackupHash = h;
     const dir = path.join(app.getPath('userData'), 'yedekler');
     fs.mkdirSync(dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
     fs.copyFileSync(src, path.join(dir, `otomatik-kayit-${stamp}-v${app.getVersion()}.sinav`));
     const old = fs.readdirSync(dir).filter((f) => f.endsWith('.sinav')).sort();
     old.slice(0, Math.max(0, old.length - 200)).forEach((f) => fs.rmSync(path.join(dir, f), { force: true }));
-  } catch { /* yedek alınamazsa çalışmaya devam */ }
+    return true;
+  } catch { return false; /* yedek alınamazsa çalışmaya devam */ }
 }
+// yedeklerin açılabildiğini denetler (hiçbir dosyayı değiştirmez, silmez)
+function verifyBackups() {
+  const ud = app.getPath('userData');
+  const dirs = [['yedekler', /\.sinav$/], [path.join('yedekler', 'bulut'), /\.json$/], [path.join('yedekler', 'esitleme'), /\.json$/], [path.join('arsiv', 'yedek'), /\.json$/], [path.join('sonuclar', 'yedek'), /\.json$/]];
+  const out = { toplam: 0, saglam: 0, bozuk: [], son: 0, gruplar: [] };
+  for (const [d, re] of dirs) {
+    const full = path.join(ud, d);
+    let names = [];
+    try { names = fs.readdirSync(full).filter((x) => re.test(x)); } catch { continue; }
+    let ok = 0;
+    for (const n of names) {
+      const f = path.join(full, n);
+      out.toplam++;
+      try {
+        const st = fs.statSync(f);
+        if (!st.size) throw new Error('bos');
+        JSON.parse(fs.readFileSync(f, 'utf8'));
+        ok++; out.saglam++; out.son = Math.max(out.son, st.mtimeMs);
+      } catch { out.bozuk.push(path.join(d, n)); }
+    }
+    out.gruplar.push({ ad: d, n: names.length, ok });
+  }
+  out.bozuk = out.bozuk.slice(0, 50);
+  return out;
+}
+ipcMain.handle('yedek:simdi', () => backupAutosave(true));
+ipcMain.handle('yedek:dogrula', () => verifyBackups());
+if (!process.env.SINAV_TEST) setInterval(() => backupAutosave(false), 30 * 60 * 1000).unref();
 // Buluttaki sınavların yerel kopyası (günde bir; son 60 kopya tutulur). Buluta hiçbir şey yazmaz.
 const cloudBackupDir = () => path.join(app.getPath('userData'), 'yedekler', 'bulut');
 ipcMain.handle('backup:cloudLast', () => {

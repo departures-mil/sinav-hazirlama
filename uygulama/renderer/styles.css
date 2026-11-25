@@ -687,3 +687,13 @@ input[type=text]:focus, textarea:focus, input[type=number]:focus { background: v
 .antable .dist span { margin-inline-end: 6px; font-size: 12px; } .antable .dist .c { color: var(--ok); font-weight: 700; }
 .antable .qt { max-width: 340px; font-size: 12px; }
 .anweak li { margin: 3px 0; font-size: 13px; }
+
+/* 1.10.4 — onay durumu, revizyon, gözden geçir işareti, son kullanım */
+.qmeta2 { align-items: center; margin-top: -2px; }
+.qmeta2 .qrevl { flex: 0 1 180px; }
+.qdurum { font-size: 12px; padding: 2px 6px; border: 1px dashed var(--line); border-radius: 6px; background: transparent; color: var(--muted); }
+.qdurum.d-t { color: #b45309; border-color: #d97706; border-style: solid; }
+.qdurum.d-k { color: #1d4ed8; border-color: #3b82f6; border-style: solid; }
+.qdurum.d-o { color: #15803d; border-color: #22c55e; border-style: solid; }
+.qinc { font-size: 12px; padding: 2px 8px; border-radius: 6px; border: 1px solid #d97706; background: rgba(217, 119, 6, .12); color: #b45309; cursor: pointer; }
+.qused { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
