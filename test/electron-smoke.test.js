@@ -38,5 +38,14 @@ test('Electron: pencere yüklenir, çekirdek başlar, tam ekran', { skip: !elect
   assert.strictEqual(o.tabs, 3);
   assert.strictEqual(o.scheme, 'falcon');
   assert.strictEqual(o.fullscreen, true, 'her açılışta tam ekran');
+  // 1.10.4: kalite ve sınıf araçları
+  assert.ok(o.ekplus, '1.10.4 denetimi çalışmadı');
+  assert.strictEqual(o.ekplus.side, 7, 'kenar çubuğunda 7 yeni araç');
+  assert.ok(o.ekplus.keep, 'durum / rev / inceleme alanları normalizeExam sonrası korunur');
+  assert.ok(o.ekplus.onay, 'onay akışı süzgeci');
+  assert.ok(o.ekplus.parse, 'Excel/Word tablosundan soru okuma');
+  assert.ok(o.ekplus.meta, 'kartta onay durumu');
+  assert.ok(o.ekplus.fits, 'müfredat kodu eşleşmesi (M8)');
+  assert.deepStrictEqual(o.ekplus.modalErrs, []);
   assert.strictEqual(o.ok, true);
 });

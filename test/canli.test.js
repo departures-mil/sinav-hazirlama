@@ -44,6 +44,13 @@ test('çevrimiçi sınav: giriş, karışık şık sırası asıl sıraya çevri
     assert.ok(answers.every((x) => x >= 0));
     const r = (await post(port, '/api/cevap', { token: j.token, answers })).body;
     assert.strictEqual(r.ok, true);
+    // 1.10.4 güvenli mod (varsayılan açık): sayfadan çıkış sayılır, "tam ekran" bildirimi sayılmaz
+    assert.strictEqual(j.guvenli, true);
+    assert.strictEqual((await post(port, '/api/olay', { token: j.token, k: 'tam' })).body.n, 0);
+    assert.strictEqual((await post(port, '/api/olay', { token: j.token, k: 'gizli' })).body.n, 1);
+    assert.strictEqual((await post(port, '/api/olay', { token: j.token, k: 'cikis' })).body.n, 2);
+    assert.strictEqual(last.students[0].olay, 2);
+    assert.strictEqual(last.guvenli, true);
     assert.deepStrictEqual(last.students[0].answers, want, 'cevaplar asıl şık sırasıyla saklanır');
     // aynı numara başka cihazdan giremez
     assert.strictEqual((await post(port, '/api/giris', { ad: 'Başka', no: '123', code: s.code })).body.error, 'TAKEN');

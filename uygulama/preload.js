@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('api', {
   // 1.10.1: genel arama, sonuçlar (optik okuma), çevrimiçi sınav, QR
   dizin: { search: inv('dizin:search'), get: inv('dizin:get'), rebuild: inv('dizin:rebuild') },
   sonuc: { read: inv('sonuc:read'), write: inv('sonuc:write') },
+  yedek: { simdi: inv('yedek:simdi'), dogrula: inv('yedek:dogrula') },
   canli: {
     start: inv('canli:start'), status: inv('canli:status'), setOpen: inv('canli:setOpen'), allowRe: inv('canli:allowRe'), finishAll: inv('canli:finishAll'),
     stop: inv('canli:stop'), list: inv('canli:list'), get: inv('canli:get'), scanResult: inv('canli:scanResult'),
