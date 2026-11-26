@@ -60,6 +60,7 @@
       "signAndEditExecutable": true
     },
     "nsis": {
+      "guid": "154737b6-bde5-52b9-b09d-952211fb6b10",
       "oneClick": true,
       "perMachine": false,
       "allowElevation": false,
