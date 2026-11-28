@@ -78,8 +78,8 @@ function create(opts) {
   async function nllb() {
     if (!nllbP) nllbP = (async () => {
       const T = o.transformers; if (!T) throw new Error('NLLB: transformers yok');
-      T.env.allowRemoteModels = false; T.env.allowLocalModels = true; T.env.localModelPath = o.modelDir; T.env.useFSCache = false;
-      const devices = o.devices || (process.platform === 'win32' ? ['dml', 'cpu'] : ['cpu']);
+      if (o.configureEnv) o.configureEnv(T.env); else { T.env.allowRemoteModels = false; T.env.allowLocalModels = true; T.env.localModelPath = o.modelDir; T.env.useFSCache = false; }
+      const devices = o.devices || (typeof process !== 'undefined' && process.platform === 'win32' ? ['dml', 'cpu'] : ['cpu']);
       let last;
       for (const device of devices) {
         try { const p = await T.pipeline('translation', o.modelId, { dtype: o.dtype, device }); p._fcDevice = device; return p; } catch (e) { last = e; }
@@ -179,4 +179,5 @@ function create(opts) {
   };
 }
 
-module.exports = { create, detect, sentences, Memory, NLLB, gemmaPrompt };
+const FCMT_API = { create, detect, sentences, Memory, NLLB, gemmaPrompt };
+if (typeof module === 'object' && module.exports) module.exports = FCMT_API; else self.FCMT = FCMT_API; // tarayıcı / Web Worker

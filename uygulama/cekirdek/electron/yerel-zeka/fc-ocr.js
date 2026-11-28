@@ -212,6 +212,14 @@
   const TR_MAP = { 'ı': 'i', 'İ': 'i', 'ş': 's', 'Ş': 's', 'ğ': 'g', 'Ğ': 'g', 'ç': 'c', 'Ç': 'c', 'ö': 'o', 'Ö': 'o', 'ü': 'u', 'Ü': 'u', 'â': 'a', 'î': 'i', 'û': 'u' };
   const skeleton = (s) => String(s).replace(/[ıİşŞğĞçÇöÖüÜâîû]/g, (c) => TR_MAP[c]).toLowerCase().replace(/\s+/g, ' ').trim();
 
+  const trCount = (x) => (String(x).match(/[ıİşŞğĞçÇöÖüÜ]/g) || []).length;
+  function lev(a, b) { // düzenleme uzaklığı (satır düzeyi, kısa metin)
+    if (Math.abs(a.length - b.length) > 40) return 99;
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) { const cur = [i]; for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; }
+    return prev[b.length];
+  }
+
   function buildLines(items) {
     items.sort((a, b) => a.cy - b.cy);
     const lines = [];
@@ -259,7 +267,10 @@
               let t = null; try { t = await opt.latinEngine(crop(img, b, 64), langs); } catch (e) { t = null; }
               if (t && t.text && t.text.trim()) {
                 t.text = t.text.trim();
-                if (skeleton(t.text) === skeleton(r.text)) r = { text: t.text, score: Math.max(r.score, t.score || 0) };
+                const sa = skeleton(t.text), sb = skeleton(r.text);
+                if (sa === sb) r = { text: t.text, score: Math.max(r.score, t.score || 0) };
+                // yakın okumalar (birkaç harf farkı): Türkçe için eğitilmiş Tesseract güvenliyse onun yazımı (ı/İ/ş/ğ ve düşen harfler)
+                else if (langs.includes('tr') && (t.score || 0) >= 0.85 && trCount(t.text) > 0 && trCount(t.text) >= trCount(r.text) && lev(sa, sb) <= Math.max(2, Math.round(0.12 * Math.max(sa.length, sb.length)))) r = { text: t.text, score: Math.max(r.score, t.score) };
                 else if ((t.score || 0) > r.score + 0.05) r = t;
               }
             }

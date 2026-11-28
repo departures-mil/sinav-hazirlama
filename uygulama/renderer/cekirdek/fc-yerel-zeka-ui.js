@@ -103,6 +103,7 @@
           else { btn.textContent = t.install; btn.disabled = !st.supported; btn.onclick = async () => { prog.hidden = false; try { await B().kur([k]); } catch (e) { info.textContent = t.err + ': ' + e.message; } st = await B().durum(); render(); }; }
           h.appendChild(btn); rows.appendChild(r);
         }
+        if (st.platform === 'web') el.querySelectorAll('.fcyz-opt').forEach((x) => x.remove());
         el.querySelectorAll('[data-o]').forEach((c) => { c.checked = (st.settings || {})[c.dataset.o] !== false; c.onchange = async () => { st = await B().ayar({ [c.dataset.o]: c.checked }); }; });
       };
       const off = B().ilerleme((d) => {
