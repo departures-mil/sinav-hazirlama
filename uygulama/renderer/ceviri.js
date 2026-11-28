@@ -100,6 +100,9 @@
     return res;
   }
 
+  // yerel zekâya giden terim listesi [tr, en, ar]: havacılık sözlüğü (SOZLUK.AV, sıra en/tr/ar)
+  let yzB = null;
+  const yzBellek = () => yzB || (yzB = ((window.SOZLUK && window.SOZLUK.AV) || []).map((r) => [main(r[1]), main(r[0]), main(r[2])]).filter((e) => e[0] && e[1] && e[2]));
   async function translate(text, from, to) {
     const src = String(text || '');
     if (!src.trim() || from === to) return src;
@@ -119,6 +122,14 @@
         } catch (err) { if (e === 'google') onlineFail++; }
       }
       setTimeout(() => { onlineFail = 0; }, 60000);
+    }
+    // Çevrimdışı sinirsel çeviri (masaüstü, yerel zekâ paketi kuruluysa: TranslateGemma / NLLB); havacılık terimleri sözlükten zorunlu
+    if (window.FCYZ && await FCYZ.ready('mt')) {
+      try {
+        const y = await FCYZ.translate(src, from, to, { memory: yzBellek() });
+        const out = String((y && y.text) || '').trim();
+        if (out) { remember(src, from, to, out); return out; }
+      } catch (e) { console.warn('yerel çeviri', e); }
     }
     const r3 = phrase(src, from, to);
     if (r3) return r3;

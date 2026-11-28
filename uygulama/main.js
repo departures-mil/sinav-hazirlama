@@ -200,6 +200,8 @@ ipcMain.handle('archive:write', (e, data) => {
   return true;
 });
 ipcMain.handle('backup:open', () => { const dir = path.join(app.getPath('userData'), 'yedekler'); fs.mkdirSync(dir, { recursive: true }); return shell.openPath(dir); });
+// Çevrimdışı yapay zekâ (OCR + çeviri) — paketler kullanıcı klasörüne bir kez iner (ortak çekirdek web/yerel-zeka)
+if (!process.env.SINAV_TEST) { try { require('./cekirdek/electron/yerel-zeka/fc-yerel-zeka-main').install({ app, ipcMain }); } catch (e) { console.error('yerel-zeka', e); } }
 if (!process.env.SINAV_TEST) app.whenReady().then(() => { backupAutosave(); initLan(); createWindow(); });
 app.on('window-all-closed', () => app.quit());
 

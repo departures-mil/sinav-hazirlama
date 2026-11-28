@@ -260,7 +260,26 @@
     return c;
   }
 
+  // Yerel zekâ (PaddleOCR PP-OCRv5 + Tesseract) satırlarını sözcük parçalarına çevirir: satırdaki konum karakter oranıyla
+  function yzTokens(r, W) {
+    const out = [];
+    for (const it of r.items || []) {
+      const xs = it.box.map((p) => p[0]), ys = it.box.map((p) => p[1]);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), words = it.text.split(/\s+/).filter(Boolean);
+      const total = it.text.length || 1, rtl = it.script === 'arabic'; let pos = 0;
+      for (const wd of words) {
+        const i = it.text.indexOf(wd, pos), a = i / total, b = (i + wd.length) / total; pos = i + wd.length;
+        const wx0 = rtl ? x1 - b * (x1 - x0) : x0 + a * (x1 - x0), wx1 = rtl ? x1 - a * (x1 - x0) : x0 + b * (x1 - x0);
+        const txt = clean(wd); if (txt) out.push({ text: txt, x0: wx0 / W, x1: wx1 / W, y0: y0 / W, y1: y1 / W, space: true });
+      }
+    }
+    return out;
+  }
   async function ocrCanvas(canvas, onProgress) {
+    if (window.FCYZ && await FCYZ.ready('ocr')) {
+      try { if (onProgress) onProgress(0.1); const r = await FCYZ.ocr(canvas, { langs: LANGS.map((c) => ({ eng: 'en', tur: 'tr', ara: 'ar' }[c] || c)) }); if (onProgress) onProgress(1); return yzTokens(r, canvas.width); }
+      catch (e) { console.warn('yerel OCR', e); }
+    }
     const w = await getWorker();
     progressCb = onProgress || null;
     try {

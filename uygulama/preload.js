@@ -3,6 +3,7 @@
 // 1.10.0: eski yama (.sinavyama) ve pencere kanalları kaldırıldı; pencere düğmeleri ve güncelleme ortak çekirdekte.
 const { contextBridge, ipcRenderer } = require('electron');
 require('./cekirdek/electron/fc-preload.js');
+require('./cekirdek/electron/yerel-zeka/fc-yerel-zeka-preload').expose(contextBridge, ipcRenderer); // window.fcYerelZeka: çevrimdışı OCR + çeviri
 
 // npm kitaplıklarının (pdf.js, jszip, docx-preview) adresi: paket kökündeki node_modules
 const LIB = (process.argv.find((a) => a.startsWith('--sinav-lib=')) || '').slice(12) || null;

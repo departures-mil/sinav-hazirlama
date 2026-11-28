@@ -178,7 +178,12 @@
   }
   function settingsGrid() {
     var wrap = ui.el('div.kb-settings');
-    FC.settings.build(wrap, { cards: [syncCard()], usage: { project: function () { var c = A().cloudConfig && A().cloudConfig(); return A().cloudReady && A().cloudReady() && c ? c.projectId : ''; } }, about: { version: VER }, onboarding: OB });
+    var cards = [syncCard()];
+    if (window.FCYZ && FCYZ.available()) { // çevrimdışı yapay zekâ kartı (OCR + çeviri paketleri)
+      var yz = ui.el('div.card'); yz.id = 'yerelZeka'; var lg = document.documentElement.lang || 'tr';
+      var h = document.createElement('h3'); h.textContent = FCYZ.title({ lang: lg }); yz.appendChild(h); yz.appendChild(FCYZ.card({ lang: lg })); cards.push(yz);
+    }
+    FC.settings.build(wrap, { cards: cards, usage: { project: function () { var c = A().cloudConfig && A().cloudConfig(); return A().cloudReady && A().cloudReady() && c ? c.projectId : ''; } }, about: { version: VER }, onboarding: OB });
     return wrap;
   }
 
