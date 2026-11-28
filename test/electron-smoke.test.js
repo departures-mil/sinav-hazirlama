@@ -47,5 +47,24 @@ test('Electron: pencere yüklenir, çekirdek başlar, tam ekran', { skip: !elect
   assert.ok(o.ekplus.meta, 'kartta onay durumu');
   assert.ok(o.ekplus.fits, 'müfredat kodu eşleşmesi (M8)');
   assert.deepStrictEqual(o.ekplus.modalErrs, []);
+  // 1.11.2
+  const y = o.yeni;
+  assert.ok(y, '1.11.2 denetimi çalışmadı');
+  assert.strictEqual(y.side, 3, 'kenar çubuğunda 3 yeni araç (eskime, Part-66, kılavuz)');
+  assert.ok(y.kul, 'kullanım kaydı (q.kul) ve yıprandı işareti normalizeExam sonrası korunur → eşitlenir');
+  assert.ok(y.worn, 'yıprandı / sınıfa verildi hesabı');
+  assert.ok(y.mod && y.mod7, 'Part-66 modül ve alt konu tanıma');
+  assert.ok(y.app2, 'Appendix II soru sayıları');
+  assert.ok(y.weights, 'modül ağırlık sapması');
+  assert.ok(y.audit, 'olumsuz kök, soru biçimi, üç dilde sayı tutarlılığı');
+  assert.ok(y.tok && y.ev && y.rule, 'OCR satır kurma, kanıt doğrulama, çevrimdışı terim sorusu');
+  assert.ok(y.lazy && y.hydrate, 'çok soruda hızlı liste ve kaydırınca kart kurulumu');
+  assert.deepStrictEqual(y.modalErrs, []);
+  const rl = y.rules;
+  assert.strictEqual(rl.winBtns, 4); assert.ok(rl.sync && rl.lan && rl.update, 'sağ üst: Eşitle · Wi-Fi · Güncelle');
+  assert.ok(rl.themes, 'açık / koyu mod ve renk şemaları');
+  assert.ok(rl.usage, 'Ayarlar: kullanım limitleri'); assert.ok(rl.contactLast, 'Ayarlar: admin ile iletişim en sonda'); assert.ok(rl.yz, 'Ayarlar: çevrimdışı yapay zekâ kartı');
+  assert.ok(rl.progress, 'güncelleme: kalan MB, hız, yalnızca değişen kısımlar');
+  assert.ok(rl.offlineTr && rl.offlineOcr, 'çevrimdışı çeviri ve OCR');
   assert.strictEqual(o.ok, true);
 });

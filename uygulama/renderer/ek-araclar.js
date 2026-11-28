@@ -35,10 +35,10 @@
     // yapay zekâ denetimi
     auditBtn: ['🤖 Yapay zekâ denetimi', '🤖 AI quality check', '🤖 تدقيق بالذكاء الاصطناعي'],
     auditTitle: ['Soru denetimi', 'Question check', 'تدقيق الأسئلة'],
-    auditHelp: ['Önce program kendi kurallarıyla (internetsiz) denetler: cevap anahtarı, boş / aynı şıklar, eksik çeviriler. Yapay zekâ anahtarınız varsa sorular ayrıca yapay zekâya sorulur: doğru cevap gerçekten doğru mu, iki doğru şık var mı, çeviriler aynı anlamı veriyor mu.', 'First the program checks offline: answer key, empty / identical options, missing translations. If you have an AI key, the questions are also checked by AI: is the key really right, are two options correct, do the translations say the same thing.', 'يفحص البرنامج أولاً دون إنترنت: مفتاح الإجابة، الخيارات الفارغة / المتطابقة، الترجمات الناقصة. وإن كان لديك مفتاح ذكاء اصطناعي تُفحص الأسئلة به أيضاً: هل الإجابة صحيحة فعلاً، هل هناك خياران صحيحان، هل تعطي الترجمات المعنى نفسه.'],
+    auditHelp: ['Önce program kendi kurallarıyla (internetsiz) denetler: cevap anahtarı, boş / aynı şıklar, eksik çeviriler, olumsuz ya da belirsiz kök, ipucu veren şık (kökteki sözcüğü tekrar eden, en uzun, kesin ifadeli, dil bilgisi ipucu), üç dilde farklı sayılar ve terim sözlüğüne uymayan çeviri. Sonra yapay zekâ (kendi anahtarınız; internet yoksa bu bilgisayardaki Ollama modeli) doğru cevabı, ikinci doğru şıkkı, belirsizliği, ipuçlarını ve üç dilin aynı anlamı resmî havacılık terimleriyle verip vermediğini denetler.', 'First the program checks offline: answer key, empty / identical options, missing translations, negative or vague stem, options that give the answer away (repeating a stem word, longest, absolute words, grammatical cue), different numbers across the three languages and translations that do not follow the glossary. Then AI (your own key; without internet the Ollama model on this computer) checks the key, a second correct option, ambiguity, clues and whether the three languages say the same thing with official aviation terminology.', 'يفحص البرنامج أولاً دون إنترنت: مفتاح الإجابة، الخيارات الفارغة / المتطابقة، الترجمات الناقصة، الجذع المنفي أو الغامض، الخيارات التي تكشف الإجابة (تكرار كلمة من الجذع، الأطول، الألفاظ القاطعة، التلميح النحوي)، اختلاف الأرقام بين اللغات الثلاث والترجمات المخالفة للمسرد. ثم يفحص الذكاء الاصطناعي (مفتاحك الخاص؛ ودون إنترنت نموذج Ollama على هذا الحاسوب) صحة الإجابة ووجود خيار صحيح ثانٍ والغموض والتلميحات وتطابق المعنى في اللغات الثلاث بمصطلحات الطيران الرسمية.'],
     auditScope: ['{n} soru denetlenecek', '{n} questions will be checked', 'سيُفحص {n} سؤالاً'],
     auditRun: ['Denetle', 'Check', 'افحص'],
-    auditAiOff: ['Yapay zekâ anahtarı yok ya da internet yok: yalnız çevrimdışı denetim yapıldı. (Ayarlar → Yapay zekâ)', 'No AI key or no internet: only the offline check was done. (Settings → AI)', 'لا يوجد مفتاح ذكاء اصطناعي أو لا يوجد إنترنت: أُجري الفحص دون اتصال فقط. (الإعدادات ← الذكاء الاصطناعي)'],
+    auditAiOff: ['Yapay zekâ anahtarı / internet yok ve bu bilgisayarda Ollama çalışmıyor: yalnız çevrimdışı denetim yapıldı. (Ayarlar → Yapay zekâ)', 'No AI key / internet and no Ollama running on this computer: only the offline check was done. (Settings → AI)', 'لا يوجد مفتاح ذكاء اصطناعي / إنترنت ولا يعمل Ollama على هذا الحاسوب: أُجري الفحص دون اتصال فقط. (الإعدادات ← الذكاء الاصطناعي)'],
     auditAiRun: ['Yapay zekâ denetliyor… {d}/{n}', 'AI is checking… {d}/{n}', 'يفحص الذكاء الاصطناعي… {d}/{n}'],
     auditAiErr: ['Yapay zekâ hatası: {e}', 'AI error: {e}', 'خطأ في الذكاء الاصطناعي: {e}'],
     auditOk: ['Sorun bulunmadı', 'No problems found', 'لم تُعثر على مشكلات'],
@@ -54,6 +54,18 @@
     au_missLang: ['{lang} çevirisi eksik.', '{lang} translation is missing.', 'ترجمة {lang} ناقصة.'],
     au_untr: ['{lang} metni diğer dille aynı (çevrilmemiş olabilir).', '{lang} text is the same as another language (may be untranslated).', 'نص {lang} مطابق للغة أخرى (ربما لم يُترجم).'],
     au_allAbove: ['"Hepsi / hiçbiri" türü şık var; tek doğru cevap ilkesini zorlayabilir.', 'An "all / none of the above" option is used; it may break the single-answer rule.', 'يوجد خيار «جميع ما سبق / لا شيء»؛ قد يخالف مبدأ الإجابة الواحدة.'],
+    // 1.11.2: kök, ipucu, üç dil ve terim sözlüğü denetimi
+    au_negStem: ['Kök olumsuz ("değildir / hariç / not"); olumsuz sözcük BÜYÜK harfle vurgulanmalı.', 'Negative stem ("not / except"); the negative word should be emphasised in CAPITALS.', 'الجذع منفي («ليس / باستثناء»)؛ يجب إبراز كلمة النفي.'],
+    au_noQ: ['Kök soru ya da tamamlanacak ifade biçiminde değil ("?", ":" ya da ____ yok); belirsiz olabilir.', 'The stem is not phrased as a question or a completion ("?", ":" or ____ missing); it may be ambiguous.', 'الجذع ليس بصيغة سؤال أو عبارة للإكمال (لا «؟» ولا «:» ولا ____)؛ قد يكون غامضاً.'],
+    au_vague: ['Kökte belirsiz niceleyici var ("genellikle, bazen, çoğu"); tek doğru cevabı zayıflatır.', 'Vague qualifier in the stem ("usually, sometimes, often"); it weakens the single correct answer.', 'يوجد في الجذع لفظ غامض («غالباً، أحياناً»)؛ يُضعف الإجابة الصحيحة الوحيدة.'],
+    au_clueWord: ['İpucu: doğru şık kökteki "{w}" sözcüğünü tekrar ediyor, çeldiriciler etmiyor.', 'Clue: the correct option repeats the stem word "{w}" and the distractors do not.', 'تلميح: الخيار الصحيح يكرر كلمة الجذع «{w}» والمشتِّتات لا تكررها.'],
+    au_absolute: ['İpucu: yalnız çeldiricilerde kesin ifade var ("her zaman, asla, yalnızca"); öğrenci bunları kolayca eler.', 'Clue: only the distractors use absolute words ("always, never, only"); candidates eliminate them easily.', 'تلميح: الألفاظ القاطعة («دائماً، أبداً، فقط») في المشتِّتات وحدها؛ يستبعدها المتقدم بسهولة.'],
+    au_grammar: ['İpucu: kök "an" ile bitiyor ve yalnız doğru şık ünlüyle başlıyor (dil bilgisi ipucu).', 'Clue: the stem ends with "an" and only the correct option starts with a vowel (grammatical cue).', 'تلميح: ينتهي الجذع بـ «an» والخيار الصحيح وحده يبدأ بحرف علة.'],
+    au_numMis: ['Üç dil arasında sayılar farklı: {l}. Değerleri ve birimleri denetleyin.', 'Numbers differ between the languages: {l}. Check the values and units.', 'الأرقام مختلفة بين اللغات: {l}. تحقّق من القيم والوحدات.'],
+    au_gloss: ['Terim sözlüğü: "{en}" {lang} metninde "{w}" olarak geçmeli.', 'Glossary: "{en}" should appear as "{w}" in the {lang} text.', 'المسرد: يجب أن يرد «{en}» في النص {lang} بصيغة «{w}».'],
+    auditFlag: ['Sorunlu {n} soruyu "gözden geçir" olarak işaretle', 'Flag the {n} questions with problems for review', 'تعليم الأسئلة ذات المشكلات ({n}) للمراجعة'],
+    auditFlagged: ['{n} soru gözden geçirilecekler listesine eklendi (Onay ve gözden geçirme).', '{n} questions were added to the review list (Approval & review).', 'أُضيف {n} سؤالاً إلى قائمة المراجعة (الاعتماد والمراجعة).'],
+    auditLocal: ['Bu bilgisayardaki yapay zekâ ({m}) ile denetleniyor…', 'Checking with the AI on this computer ({m})…', 'جارٍ الفحص بالذكاء الاصطناعي على هذا الحاسوب ({m})…'],
     au_longest: ['Doğru şık diğerlerinden belirgin biçimde uzun; öğrenciye ipucu verebilir.', 'The correct option is clearly longer than the others; it may give a hint.', 'الخيار الصحيح أطول بوضوح من غيره؛ قد يكون تلميحاً.'],
     au_ai_key: ['Yapay zekâ: işaretli cevap yanlış görünüyor; doğrusu {l} olabilir.', 'AI: the marked answer looks wrong; {l} may be correct.', 'الذكاء الاصطناعي: الإجابة المحددة تبدو خاطئة؛ قد تكون {l} الصحيحة.'],
     au_ai_multi: ['Yapay zekâ: birden çok doğru şık olabilir ({l}).', 'AI: more than one option may be correct ({l}).', 'الذكاء الاصطناعي: قد يكون أكثر من خيار صحيحاً ({l}).'],
@@ -290,13 +302,84 @@
       const mx = Math.max(...others);
       if (c > 20 && c > mx * 1.6) out.push({ k: 'au_longest', lvl: 'info' });
     }
+    moreIssues(q, opts, main, langs).forEach((x) => out.push(x));
     return out;
+  }
+  // 1.11.2 — kök, ipucu, üç dil tutarlılığı ve terim sözlüğü (çevrimdışı)
+  const NEG = { tr: /\b(değil(dir)?|yanlıştır|hariç|olmayan|dışında)\b/i, en: /\b(not|except|incorrect|false|least)\b/i, ar: /(ليس|ليست|غير|باستثناء|عدا|لا\s)/ };
+  const NEG_UP = /\b(DEĞİL(DİR)?|YANLIŞTIR|HARİÇ|OLMAYAN|DIŞINDA|NOT|EXCEPT|INCORRECT|FALSE|LEAST)\b|\*\*|__[^_]/;
+  const VAGUE = /\b(genellikle|bazen|çoğu zaman|çoğunlukla|usually|sometimes|often|generally|mostly)\b|غالباً|أحياناً|عادةً/i;
+  const ABS = /\b(her zaman|asla|hiçbir zaman|yalnızca|sadece|daima|always|never|only|all|none)\b|دائماً|أبداً|فقط/i;
+  const STOP = new Set('which what when where that this with from have been their there these those about into than then them they will would could should hangi nedir nasıl olan olarak için veya ancak gibi daha kadar sonra önce aşağıdaki aşağıdakilerden şeklinde durumunda'.split(' '));
+  const digits = (s) => (String(s || '').replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).match(/\d+(?:[.,]\d+)?/g) || []).map((x) => x.replace(',', '.')).sort().join(' ');
+  const words = (s) => nrm(s).split(' ').filter((w) => w.length >= 5 && !STOP.has(w));
+  const GRE = new Map();
+  function glossaryHits(q) {
+    const S = window.SOZLUK; if (!S || !S.AV) return [];
+    const en = nrm(q.text.en); if (!en) return [];
+    const out = [];
+    for (const w of S.AV) {
+      if (out.length >= 2) break;
+      const term = nrm(w[0]); if (term.length < 4) continue;
+      let re = GRE.get(term); if (!re) { re = new RegExp('(^| )' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '( |$)'); GRE.set(term, re); }
+      if (!en.includes(term) || !re.test(en)) continue;
+      [['tr', w[1]], ['ar', w[2]]].forEach(([k, eq]) => {
+        const tx = nrm(q.text[k]); if (!tx || !eq) return;
+        // karşılığın seçeneklerinden ("dron / İHA", "stol (perdövites)") biri metinde olmalı; Türkçe eklere pay bırakılır
+        const alts = String(eq).split(/[\/(),;]|\s-\s/).map((x) => nrm(x)).filter((x) => x.length >= 3);
+        const ok = !alts.length || alts.some((x) => { const stem = k === 'tr' && x.length > 5 ? x.slice(0, x.length - 2) : k === 'ar' ? x.replace(/^ال/, '') : x; return tx.includes(stem); });
+        if (!ok) out.push({ k: 'au_gloss', v: { en: w[0], w: alts[0] || eq, lang: window.LANGS[k] }, lvl: 'info' });
+      });
+    }
+    return out;
+  }
+  function moreIssues(q, opts, main, langs) {
+    const out = [];
+    const stem = q.text[main] || '';
+    if (stem.trim()) {
+      const neg = langs.some((k) => NEG[k] && NEG[k].test(q.text[k] || ''));
+      if (neg && !langs.some((k) => NEG_UP.test(q.text[k] || ''))) out.push({ k: 'au_negStem', lvl: 'info' });
+      if (stem.trim().length > 15 && !/[?؟:：]|_{2,}|\.\.\.|…/.test(stem)) out.push({ k: 'au_noQ', lvl: 'info' });
+      if (VAGUE.test(stem)) out.push({ k: 'au_vague', lvl: 'info' });
+    }
+    if (q.correct >= 0 && q.correct < opts.length && opts.length > 2) {
+      const sw = new Set(words(stem));
+      const cw = words(opts[q.correct][main]).filter((w) => sw.has(w));
+      const ow = opts.filter((_, i) => i !== q.correct).map((o) => new Set(words(o[main])));
+      const clue = cw.find((w) => !ow.some((s2) => s2.has(w)));
+      if (clue) out.push({ k: 'au_clueWord', v: { w: clue }, lvl: 'info' });
+      const absD = opts.filter((o, i) => i !== q.correct && ABS.test(o[main] || '')).length;
+      if (absD >= 2 && !ABS.test(opts[q.correct][main] || '')) out.push({ k: 'au_absolute', lvl: 'info' });
+      const en = (q.text.en || '').trim();
+      if (/\ban\s*(_{2,}|\.{3}|…)?\s*[.?:]?$/i.test(en)) {
+        const vow = opts.map((o) => /^[aeiou]/i.test((o.en || '').trim()));
+        if (vow[q.correct] && vow.filter(Boolean).length === 1) out.push({ k: 'au_grammar', lvl: 'info' });
+      }
+    }
+    // üç dil: kök ve şıklardaki sayılar aynı olmalı
+    if (langs.length > 1) {
+      const sig = (k) => digits([q.text[k], ...opts.map((o) => o[k])].join(' '));
+      const full = langs.filter((k) => opts.every((o) => (o[k] || '').trim() || !(o[main] || '').trim()));
+      const sigs = new Map(full.map((k) => [k, sig(k)]));
+      const distinct = new Set(sigs.values());
+      if (distinct.size > 1 && [...distinct].some(Boolean)) out.push({ k: 'au_numMis', v: { l: full.map((k) => k.toUpperCase() + (sigs.get(k) ? ' ' + sigs.get(k) : ' —')).join(' ≠ ') }, lvl: 'bad' });
+    }
+    glossaryHits(q).forEach((x) => out.push(x));
+    return out;
+  }
+  // denetlenen sorulardaki havacılık terimleri ve resmî karşılıkları (kullanıcı sözlüğü önce gelir)
+  function glossFor(qs) {
+    const S = window.SOZLUK; if (!S || !S.AV) return '';
+    const low = qs.map((q) => (q.text.en || '') + ' ' + q.options.map((o) => o.en || '').join(' ')).join(' ').toLowerCase();
+    const hits = S.AV.filter((w) => w[0] && w[0].length > 2 && low.includes(String(w[0]).toLowerCase())).slice(0, 40);
+    return hits.length ? 'Mandatory aviation glossary (EN = TR | AR): ' + hits.map((w) => `${w[0]} = ${w[1]} | ${w[2]}`).join('; ') : '';
   }
   async function aiCheck(qs, nOpt, L, onProg, ctl) {
     const res = new Map();
     const lang = window.UI_LANG || 'tr';
     const sys = `You are a strict exam quality reviewer for UAV/aviation and English-language multiple-choice questions written in Turkish, English and Arabic.
-For each question check: (1) is the marked correct option really correct; (2) is more than one option defensibly correct; (3) is the question ambiguous; (4) do the TR/EN/AR versions say the same thing with correct aviation terminology.
+For each question check: (1) is the marked correct option really correct; (2) is more than one option defensibly correct; (3) is the stem ambiguous, vague, or a negative stem without emphasis; (4) do the TR/EN/AR versions say the same thing (same numbers, units, negation) with correct, formal aviation terminology (EASA / ICAO usage); (5) does any option give the answer away (correct option longest or most detailed, repeats stem words, grammatical agreement with the stem, absolute words only in distractors, implausible distractors).
+Treat aviation-literature terminology as mandatory: flag everyday wording where an official term exists.
 Return STRICT JSON only: {"results":[{"i":0,"keyOk":true,"better":null,"multi":[],"notes":[]}]}.
 "i" is the question index given. "keyOk": false only if you are confident the marked key is wrong; then "better" is the 0-based index of the right option. "multi": other 0-based indices that are also correct. "notes": at most 3 very short notes in ${{ tr: 'Turkish', en: 'English', ar: 'Arabic' }[lang]} only for real problems (ambiguity, wrong fact, translation mismatch with which language). Empty arrays when fine. Do not comment on style.`;
     const chunk = 6;
@@ -304,8 +387,11 @@ Return STRICT JSON only: {"results":[{"i":0,"keyOk":true,"better":null,"multi":[
       if (ctl.stop) break;
       const part = qs.slice(s, s + chunk);
       const payload = part.map((q, i) => ({ i: s + i, text: q.text, options: q.options.slice(0, nOpt).map((o, k) => ({ letter: L[k], ...o })), marked: q.correct >= 0 ? q.correct : null }));
+      const gl = glossFor(part);
       try {
-        const out = await window.AI.chat([{ role: 'user', content: JSON.stringify(payload) }], { system: sys, json: true, temperature: 0.1, maxTokens: 4096, timeout: 90000 });
+        const msg = [{ role: 'user', content: JSON.stringify(payload) }];
+        const o2 = { system: sys + (gl ? '\n' + gl : ''), json: true, temperature: 0.1, maxTokens: 4096, timeout: ctl.local ? 240000 : 90000 };
+        const out = ctl.local ? await EK.localChat(msg, o2) : await window.AI.chat(msg, o2);
         const m = String(out).match(/\{[\s\S]*\}/);
         const j = m ? JSON.parse(m[0]) : null;
         ((j && j.results) || []).forEach((r) => { const q = qs[+r.i]; if (q) res.set(q, r); });
@@ -320,14 +406,26 @@ Return STRICT JSON only: {"results":[{"i":0,"keyOk":true,"better":null,"multi":[
     if (!qs.length) return a.toast(t('nothingToOutput'), 'warn');
     const nOpt = a.S().optionCount, L = a.letters();
     const body = document.createElement('div');
-    body.innerHTML = `<p class="help">${esc(t('auditHelp'))}</p><div class="row"><b>${esc(t('auditScope', { n: qs.length }))}</b><button class="btn primary" id="auGo">${esc(t('auditRun'))}</button><button class="btn" id="auStop" style="display:none">${esc(t('auditStop'))}</button></div><div class="bkinfo" id="auInfo"></div><div id="auList" class="aulist"></div>`;
+    body.innerHTML = `<p class="help">${esc(t('auditHelp'))}</p><div class="row"><b>${esc(t('auditScope', { n: qs.length }))}</b><button class="btn primary" id="auGo">${esc(t('auditRun'))}</button><button class="btn" id="auStop" style="display:none">${esc(t('auditStop'))}</button></div><div class="bkinfo" id="auInfo"></div><div class="row" id="auFlagRow" style="display:none"><button class="btn" id="auFlag"></button></div><div id="auList" class="aulist"></div>`;
+    let issues = new Map();
+    // sorunlu sorular "gözden geçir" listesine (soru değiştirilmez)
+    const drawFlag = () => {
+      const bad = qs.filter((q) => (issues.get(q) || []).some((x) => x.lvl === 'bad' || x.fix != null || /^au_ai/.test(x.k || '') || x.ai));
+      const row = $('#auFlagRow', body); row.style.display = bad.length ? '' : 'none';
+      const b = $('#auFlag', body); b.textContent = t('auditFlag', { n: bad.length });
+      b.onclick = () => {
+        a.snap(); let n = 0;
+        bad.forEach((q) => { if (q.inceleme) return; q.inceleme = { n: 'denetim', t: Date.now(), not: issues.get(q).map((x) => x.txt).join(' · ').slice(0, 300) }; n++; });
+        a.renderList(); a.changed(); a.toast(t('auditFlagged', { n }), 'ok', [{ label: t('undo'), onClick: () => a.undo() }]);
+      };
+    };
     const m = a.modal({ title: t('auditTitle'), body, wide: true, buttons: [{ label: t('close'), onClick: (c) => { ctl.stop = true; c(); } }] });
     const ctl = { stop: false };
     const pickT = (ml) => (ml && (ml[a.CL()] || ml.tr || ml.en || ml.ar)) || '';
     const run = async () => {
       $('#auGo', body).disabled = true;
       const info = $('#auInfo', body);
-      const issues = new Map(qs.map((q) => [q, offlineIssues(q, nOpt, L).map((x) => ({ ...x, txt: t(x.k, x.v) }))]));
+      issues = new Map(qs.map((q) => [q, offlineIssues(q, nOpt, L).map((x) => ({ ...x, txt: t(x.k, x.v) }))]));
       const draw = () => {
         const bad = qs.filter((q) => issues.get(q).length);
         $('#auList', body).innerHTML = bad.length ? bad.map((q) => {
@@ -348,20 +446,25 @@ Return STRICT JSON only: {"results":[{"i":0,"keyOk":true,"better":null,"multi":[
         return { bad: bad.length, nIss };
       };
       let r = draw();
+      drawFlag();
       const canAi = window.AI && window.AI.ready() && navigator.onLine !== false;
-      if (!canAi) { info.textContent = t('auditAiOff') + (r.nIss ? ' · ' + t('auditSum', { q: r.bad, n: r.nIss }) : ''); $('#auGo', body).disabled = false; return; }
+      // 1.11.2: internet ya da anahtar yoksa bu bilgisayardaki yapay zekâ (Ollama) denenir
+      const localM = !canAi && EK.ollamaModel ? await EK.ollamaModel() : null;
+      if (!canAi && !localM) { info.textContent = t('auditAiOff') + (r.nIss ? ' · ' + t('auditSum', { q: r.bad, n: r.nIss }) : ''); $('#auGo', body).disabled = false; return; }
+      ctl.local = !canAi;
       $('#auStop', body).style.display = '';
       $('#auStop', body).onclick = () => { ctl.stop = true; };
-      const ai = await aiCheck(qs, nOpt, L, (d, n) => { info.textContent = t('auditAiRun', { d, n }); }, ctl);
+      if (ctl.local) info.textContent = t('auditLocal', { m: localM });
+      const ai = await aiCheck(qs, nOpt, L, (d, n) => { info.textContent = (ctl.local ? t('auditLocal', { m: localM }) + ' ' : '') + t('auditAiRun', { d, n }); }, ctl);
       ai.forEach((v, q) => {
         if (q === 'err') return;
         const l = issues.get(q); if (!l) return;
-        if (v.keyOk === false && Number.isInteger(v.better) && v.better >= 0 && v.better < nOpt && v.better !== q.correct) l.push({ txt: t('au_ai_key', { l: L[v.better] }), lvl: 'bad', fix: v.better });
-        if (Array.isArray(v.multi) && v.multi.length) l.push({ txt: t('au_ai_multi', { l: v.multi.filter((x) => x >= 0 && x < nOpt).map((x) => L[x]).join(', ') }), lvl: 'bad' });
-        (v.notes || []).slice(0, 3).forEach((m2) => { if (m2) l.push({ txt: t('au_ai_note', { m: String(m2).slice(0, 300) }), lvl: 'info' }); });
+        if (v.keyOk === false && Number.isInteger(v.better) && v.better >= 0 && v.better < nOpt && v.better !== q.correct) l.push({ txt: t('au_ai_key', { l: L[v.better] }), lvl: 'bad', fix: v.better, ai: 1 });
+        if (Array.isArray(v.multi) && v.multi.length) l.push({ txt: t('au_ai_multi', { l: v.multi.filter((x) => x >= 0 && x < nOpt).map((x) => L[x]).join(', ') }), lvl: 'bad', ai: 1 });
+        (v.notes || []).slice(0, 3).forEach((m2) => { if (m2) l.push({ txt: t('au_ai_note', { m: String(m2).slice(0, 300) }), lvl: 'info', ai: 1 }); });
       });
-      r = draw();
-      info.textContent = (ai.has('err') ? t('auditAiErr', { e: ai.get('err') }) + ' · ' : '') + (r.nIss ? t('auditSum', { q: r.bad, n: r.nIss }) : t('auditOk')) + (window.AI.lastModel ? ` · ${window.AI.lastModel}` : '');
+      r = draw(); drawFlag();
+      info.textContent = (ai.has('err') ? t('auditAiErr', { e: ai.get('err') }) + ' · ' : '') + (r.nIss ? t('auditSum', { q: r.bad, n: r.nIss }) : t('auditOk')) + (ctl.local ? ` · ${localM}` : window.AI.lastModel ? ` · ${window.AI.lastModel}` : '');
       $('#auStop', body).style.display = 'none';
       $('#auGo', body).disabled = false;
     };
@@ -601,6 +704,7 @@ Return STRICT JSON only: {"results":[{"i":0,"keyOk":true,"better":null,"multi":[
   }
 
   EK._audit = auditModal;
+  EK.offlineIssues = offlineIssues;
   EK._search = searchModal;
   Object.assign(EK, { dupModal, tplModal, offlineIssues, tplBuild, simPairs: pairs, prepQ: prep });
   EK.addSide('btnEkSearch', () => t('srBtn'), searchModal);

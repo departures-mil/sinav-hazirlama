@@ -45,6 +45,7 @@
     plReviewed: ['✓ Gözden geçirildi', '✓ Reviewed', '✓ تمت المراجعة'],
     plFlagTip: ['Gözden geçirilmeli: {n}. Tıklayın: işaret kalkar.', 'Needs review: {n}. Click to clear the flag.', 'تحتاج إلى مراجعة: {n}. انقر لإزالة العلامة.'],
     plInc_analiz: ['Madde analizi', 'Item analysis', 'تحليل الفقرات'], plInc_revizyon: ['Kaynak revizyonu değişti', 'Source revision changed', 'تغيّرت مراجعة المصدر'], plInc_elle: ['Elle işaretlendi', 'Flagged manually', 'عُلّم يدوياً'],
+    plInc_denetim: ['Soru denetimi', 'Question check', 'فحص السؤال'], plInc_uretim: ['Kılavuzdan üretildi — kaynağa göre denetleyin', 'Generated from a manual — check against the source', 'مولَّد من دليل — راجعه مقابل المصدر'],
     plGo: ['Git', 'Go', 'انتقال'],
     // madde analizi
     plNf: ['İşlemeyen çeldirici', 'Non-functioning distractor', 'مُشتِّت غير فعّال'],
@@ -154,6 +155,15 @@
     plBakDone: ['Yedek alındı.', 'Backup taken.', 'تم النسخ الاحتياطي.'],
     plBakSame: ['Son yedekten beri değişiklik yok; yine de yeni yedek alındı.', 'Nothing changed since the last backup; a new backup was taken anyway.', 'لا تغيير منذ آخر نسخة؛ ومع ذلك أُخذت نسخة جديدة.'],
     // canlı sınav
+    // 1.11.2: soru eskimesi
+    esYip: ['Yıprandı', 'Worn', 'مستهلَك'],
+    esYipTip: ['Bu soru öğrencilere {n} kez verildi (eşik {e}); ezberlenmiş olabilir.', 'This question has been given to candidates {n} times (threshold {e}); it may have been memorised.', 'أُعطي هذا السؤال للمتقدمين {n} مرة (الحد {e})؛ ربما حُفظ.'],
+    esYipElle: ['Elle "yıprandı" olarak işaretlendi ({n} kullanım).', 'Marked as worn manually ({n} uses).', 'عُلِّم يدوياً كمستهلَك ({n} استخدامات).'],
+    esSinifTip: ['Bu soru "{s}" sınıfına daha önce verildi.', 'This question was already given to the class "{s}".', 'أُعطي هذا السؤال سابقاً للصف «{s}».'],
+    esPlanSinif: ['"{s}" sınıfına daha önce verilen soruları hiç alma', 'Never take questions already given to the class "{s}"', 'عدم أخذ الأسئلة التي أُعطيت سابقاً للصف «{s}»'],
+    esPlanSinifYok: ['Sınıf adı yok (Soru eskimesi penceresinden yazın)', 'No class name (set it in Question wear)', 'لا يوجد اسم صف (اكتبه في نافذة استهلاك الأسئلة)'],
+    esPlanSinifTip: ['Sınıf adı "Soru eskimesi" penceresinde yazılır; çıktı, kitapçık ve çevrimiçi sınavlar o sınıfa verilmiş sayılır.', 'The class name is set in "Question wear"; outputs, booklets and online exams are recorded for that class.', 'يُكتب اسم الصف في نافذة «استهلاك الأسئلة»؛ تُسجَّل المخرجات والكتيّبات والاختبارات عبر الشبكة لذلك الصف.'],
+    esPlanYip: ['Yıpranmış soruları (≥{e} kullanım) yalnız başka soru kalmazsa al', 'Take worn questions (≥{e} uses) only if nothing else is left', 'لا تؤخذ الأسئلة المستهلَكة (≥{e} استخدامات) إلا عند عدم وجود غيرها'],
     plGuv: ['Güvenli mod', 'Secure mode', 'الوضع الآمن'],
     plGuvTip: ['Öğrencinin sınav sayfasından çıkması ya da tam ekranı kapatması kaydedilir ve burada ⚠ sayısı olarak görünür.', 'Leaving the exam page or exiting full screen is recorded and shown here as a ⚠ count.', 'تُسجَّل مغادرة المتقدم صفحة الاختبار أو خروجه من ملء الشاشة وتظهر هنا كعدد ⚠.'],
     plOlay_gizli: ['sınav sayfasından çıktı', 'left the exam page', 'غادر صفحة الاختبار'], plOlay_cikis: ['tam ekranı kapattı', 'exited full screen', 'خرج من ملء الشاشة'], plOlay_tam: ['tam ekran', 'full screen', 'ملء الشاشة'],
@@ -161,7 +171,7 @@
 
   /* ---------------- soru alanları ---------------- */
   const DUR = ['t', 'k', 'o'];
-  const INC = ['analiz', 'revizyon', 'elle'];
+  const INC = ['analiz', 'revizyon', 'elle', 'denetim', 'uretim'];
   const str = (v, n) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f]/g, ' ').slice(0, n) : '');
   const base = EK.qExtra;
   EK.qExtra = function qExtraPlus(q) {
@@ -170,30 +180,67 @@
     if (DUR.includes(q.durum)) o.durum = q.durum;
     const rev = str(q.rev, 60).trim(); if (rev) o.rev = rev;
     if (q.inceleme && INC.includes(q.inceleme.n)) o.inceleme = { n: q.inceleme.n, t: +q.inceleme.t || 0, ...(q.inceleme.not ? { not: str(q.inceleme.not, 300) } : {}) };
+    // 1.11.2: kullanım kaydı (eşitlenir) ve elle "yıprandı" işareti
+    if (Array.isArray(q.kul)) { const k = q.kul.filter((r) => Array.isArray(r) && +r[0] > 0).slice(-30).map((r) => [+r[0], str(r[1], 60), str(r[2], 40)]); if (k.length) o.kul = k; }
+    if (q.yip) o.yip = true;
     return o;
   };
   const onayOn = () => { const a = A(); return !!(a && a.prefs && a.prefs.onayAkisi); };
   EK.onayMatch = (q) => !onayOn() || !q.durum || q.durum === 'o';
 
   /* ---------------- tekrar (kullanım) kaydı ---------------- */
+  // 1.11.2: kayıt sorunun içinde de taşınır (q.kul: [[zaman, sınav adı, sınıf]]) → bulut ve Wi-Fi eşitlemesiyle bütün cihazlara gider.
+  // Cihazdaki ek.kullanim (arşiv soruları da) açılan sınavların kayıtlarıyla birleştirilir. Kayıt silinmez; soru başına son 30 kullanım tutulur.
   const fp = (q) => { const s = norm(q && q.text && (q.text.en || q.text.tr || q.text.ar)).slice(0, 240); let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return s ? (h >>> 0).toString(36) + s.length.toString(36) : ''; };
   const USE = 'ek.kullanim';
+  const HOUR = 3600000;
+  const sinifNow = () => { const a = A(); return str((a && a.prefs && a.prefs.sinif) || '', 40).trim(); };
+  const esikNow = () => { const a = A(); const v = +(a && a.prefs && a.prefs.eskiEsik); return v >= 1 ? Math.min(50, Math.round(v)) : 4; };
+  const sameCls = (x, s) => norm(x && x[2]) === norm(s);
+  // aynı saat içinde aynı sınıfa giden tekrar çıktılar tek sayılır
+  const addRec = (l, rec) => { const out = (Array.isArray(l) ? l : []).filter((x) => Array.isArray(x) && !(Math.abs(rec[0] - x[0]) < HOUR && sameCls(x, rec[2]))); out.push(rec); return out.sort((x, y) => x[0] - y[0]).slice(-30); };
+  function pruneMap(m) {
+    const keys = Object.keys(m);
+    if (keys.length > 20000) keys.sort((x, y) => m[x][m[x].length - 1][0] - m[y][m[y].length - 1][0]).slice(0, keys.length - 20000).forEach((k) => delete m[k]);
+  }
   function markUsed(ids, name) {
     const a = A(); if (!a) return;
     const set = new Set(ids);
     const m = ls.get(USE, {});
-    const now = Date.now();
+    const rec = [Date.now(), String(name || '').slice(0, 60), sinifNow()];
+    let ch = 0;
     a.exam.questions.filter((q) => set.has(q.id)).forEach((q) => {
-      const k = fp(q); if (!k) return;
-      const l = (m[k] || []).filter((x) => now - x[0] > 3600000); // aynı saat içindeki tekrar çıktılar tek sayılır
-      l.push([now, String(name || '').slice(0, 60)]);
-      m[k] = l.slice(-5);
+      const k = fp(q); if (k) m[k] = addRec(m[k], rec);
+      q.kul = addRec(q.kul, rec); ch++;
     });
-    const keys = Object.keys(m);
-    if (keys.length > 20000) keys.sort((x, y) => m[x][m[x].length - 1][0] - m[y][m[y].length - 1][0]).slice(0, keys.length - 20000).forEach((k) => delete m[k]);
+    pruneMap(m);
     ls.set(USE, m);
+    if (ch) a.changed();
   }
-  const lastUse = (q, m) => { const l = (m || ls.get(USE, {}))[fp(q)]; return l && l.length ? l[l.length - 1] : null; };
+  // açık sınavdaki (başka cihazdan eşitlenmiş olabilir) kayıtları cihazdaki listeye kat
+  function absorbUse(qs) {
+    const a = A(); const list = qs || (a && a.exam && a.exam.questions) || [];
+    const m = ls.get(USE, {}); let n = 0;
+    list.forEach((q) => {
+      if (!Array.isArray(q.kul) || !q.kul.length) return;
+      const k = fp(q); if (!k) return;
+      const have = m[k] || [];
+      q.kul.forEach((r) => { if (Array.isArray(r) && +r[0] && !have.some((x) => x[0] === r[0])) { have.push([+r[0], String(r[1] || ''), String(r[2] || '')]); n++; } });
+      if (n) m[k] = have.sort((x, y) => x[0] - y[0]).slice(-30);
+    });
+    if (n) { pruneMap(m); ls.set(USE, m); }
+    return n;
+  }
+  // sorunun bütün kullanımları (cihaz + sorunun kendi kaydı), zamana göre
+  function usesOf(q, m) {
+    const l = ((m || ls.get(USE, {}))[fp(q)] || []).slice();
+    (Array.isArray(q && q.kul) ? q.kul : []).forEach((r) => { if (Array.isArray(r) && +r[0] && !l.some((x) => x[0] === +r[0])) l.push([+r[0], String(r[1] || ''), String(r[2] || '')]); });
+    return l.sort((x, y) => x[0] - y[0]);
+  }
+  const lastUse = (q, m) => { const l = usesOf(q, m); return l.length ? l[l.length - 1] : null; };
+  const useCount = (q, m) => usesOf(q, m).length;
+  const givenTo = (q, s, m) => !!s && usesOf(q, m).some((x) => sameCls(x, s));
+  const isWorn = (q, m) => !!(q && q.yip) || useCount(q, m) >= esikNow();
 
   /* ---------------- kart: onay durumu, revizyon, gözden geçir işareti ---------------- */
   const baseMeta = EK.metaRow;
@@ -205,7 +252,9 @@
       `<select class="qdurum${q.durum ? ' d-' + q.durum : ''}" title="${esc(t('plDurum'))}"><option value="">${esc(t('plDurum_'))}</option>${DUR.map((d) => `<option value="${d}"${q.durum === d ? ' selected' : ''}>${esc(t('plDurum_' + d))}</option>`).join('')}</select>` +
       `<label class="qrevl">🔖 <input class="qrev" dir="auto" placeholder="${esc(t('plRevPh'))}" value="${esc(q.rev || '')}"></label>` +
       (inc ? `<button class="qinc" type="button" title="${esc(t('plFlagTip', { n: t('plInc_' + inc.n) + (inc.not ? ' — ' + inc.not : '') }))}">⚠ ${esc(t('plInc_' + inc.n))}</button>` : '') +
-      (u ? `<span class="qused" title="${esc(t('plUsedTip', { d: fmtD(u[0]), s: u[1] || '—' }))}">🕘 ${esc(fmtD(u[0]))}</span>` : '') + `</div>`;
+      (u ? `<span class="qused" title="${esc(t('plUsedTip', { d: fmtD(u[0]), s: (u[1] || '—') + (u[2] ? ' · ' + u[2] : '') }))}">🕘 ${esc(fmtD(u[0]))}</span>` : '') +
+      (isWorn(q) ? `<span class="qworn" title="${esc(t(q.yip ? 'esYipElle' : 'esYipTip', { n: useCount(q), e: esikNow() }))}">🥀 ${esc(t('esYip'))}${useCount(q) ? ' ' + useCount(q) + '×' : ''}</span>` : '') +
+      (givenTo(q, sinifNow()) ? `<span class="qcls" title="${esc(t('esSinifTip', { s: sinifNow() }))}">🔁 ${esc(sinifNow())}</span>` : '') + `</div>`;
     return h + extra;
   };
   const baseWire = EK.wireCard;
@@ -325,14 +374,15 @@
     try { if (src.bank && window.Bank) (await window.Bank.load()).bank.questions.forEach((b) => { try { out.push({ q: a.bankToQuestion(b), from: 'bank' }); } catch { /* bozuk */ } }); } catch { /* yok */ }
     return out.filter((x) => x.q && a.isAnswered(x.q));
   }
-  async function planModal() {
+  async function planModal(init) {
     const a = A();
     const body = document.createElement('div');
     const plans = ls.get('ek.planlar', []);
-    let plan = { ad: '', rows: [{ konu: '', zor: '', adet: 10 }], src: { exam: true, mine: true, bank: false }, gun: 90, onayli: true };
+    let plan = { ad: '', rows: [{ konu: '', zor: '', adet: 10 }], src: { exam: true, mine: true, bank: false }, gun: 90, onayli: true, sinifHaric: true, yipHaric: true };
+    if (init && Array.isArray(init.rows) && init.rows.length) plan = Object.assign(plan, JSON.parse(JSON.stringify(init)));
     const li = { tr: 0, en: 1, ar: 2 }[a.prefs.uiLang] || 0;
     let pool = null;
-    const loadPool = async () => { pool = null; render(); pool = await poolFor(plan.src); render(); };
+    const loadPool = async () => { pool = null; render(); absorbUse(); pool = await poolFor(plan.src); render(); };
     const avail = (r) => (pool ? pool.filter((x) => konuFits(x.q, r.konu) && (!r.zor || x.q.zor === r.zor) && (!plan.onayli || !x.q.durum || x.q.durum === 'o')).length : '…');
     const render = () => {
       const total = plan.rows.reduce((s, r) => s + (+r.adet || 0), 0);
@@ -349,6 +399,7 @@
         <div class="row"><button class="btn" id="ppAdd">${esc(t('plAddRow'))}</button><b>${esc(t('plTotal', { n: total }))}</b></div>
         <div class="row"><b>${esc(t('plSrc'))}:</b>${['exam', 'mine', 'bank'].map((k) => `<label class="chk"><input type="checkbox" data-src="${k}"${plan.src[k] ? ' checked' : ''}> ${esc(t('plSrc' + k[0].toUpperCase() + k.slice(1)))}</label>`).join('')}${pool ? '' : ` <span class="muted">${esc(t('plLoading'))}</span>`}</div>
         <div class="row"><label class="chk">${t('plDays', { i: `<input class="in" type="number" id="ppGun" min="0" max="3650" value="${+plan.gun || 0}" style="width:70px">` })}</label><label class="chk"><input type="checkbox" id="ppOk"${plan.onayli ? ' checked' : ''}> ${esc(t('plOnlyOk'))}</label></div>
+        <div class="row"><label class="chk" title="${esc(t('esPlanSinifTip'))}"><input type="checkbox" id="ppCls"${plan.sinifHaric !== false ? ' checked' : ''}${sinifNow() ? '' : ' disabled'}> ${esc(sinifNow() ? t('esPlanSinif', { s: sinifNow() }) : t('esPlanSinifYok'))}</label><label class="chk"><input type="checkbox" id="ppYip"${plan.yipHaric !== false ? ' checked' : ''}> ${esc(t('esPlanYip', { e: esikNow() }))}</label></div>
         <div class="row"><button class="btn primary" id="ppGo"${total && pool ? '' : ' disabled'}>${esc(t('plMake'))}</button><button class="btn" id="ppSave">${esc(t('plSave'))}</button>${plans.length ? `<button class="btn" id="ppDel">${esc(t('plDel'))}</button>` : ''}</div>`;
       $('#ppAd', body).oninput = (e) => { plan.ad = e.target.value.slice(0, 80); };
       body.querySelectorAll('[data-k]').forEach((i) => { i.onchange = () => { plan.rows[+i.dataset.k].konu = i.value.trim(); render(); }; });
@@ -359,9 +410,12 @@
       $('#ppAdd', body).onclick = () => { plan.rows.push({ konu: '', zor: '', adet: 5 }); render(); };
       $('#ppGun', body).onchange = (e) => { plan.gun = Math.max(0, +e.target.value || 0); };
       $('#ppOk', body).onchange = (e) => { plan.onayli = e.target.checked; render(); };
+      $('#ppCls', body).onchange = (e) => { plan.sinifHaric = e.target.checked; };
+      $('#ppYip', body).onchange = (e) => { plan.yipHaric = e.target.checked; };
       $('#ppPre', body).onchange = (e) => {
         const v = e.target.value; if (!v) return;
         if (v === 'cur') { const ks = [...new Set(a.exam.questions.map((q) => String(q.konu || '').split('>')[0].trim()).filter(Boolean))]; plan.rows = ks.map((k) => ({ konu: k, zor: '', adet: 5 })); }
+        else if (v === 'p66' && EK.p66Rows) { plan.rows = EK.p66Rows(); plan.ad = plan.ad || t('plPresetP66') + ' ' + EK.p66Cat(); } // 1.11.2: App. II soru sayılarıyla
         else { plan.rows = PRESETS[v].map((r) => ({ konu: r[li] || r[0], zor: '', adet: 0 })); plan.ad = plan.ad || t(v === 'p66' ? 'plPresetP66' : 'plPresetAtpl'); }
         if (!plan.rows.length) plan.rows = [{ konu: '', zor: '', adet: 10 }];
         render();
@@ -378,9 +432,11 @@
       const picked = []; const short = []; let oldUsed = 0;
       for (const r of plan.rows) {
         const want = +r.adet || 0; if (!want) continue;
-        const cand = pool.filter((x) => konuFits(x.q, r.konu) && (!r.zor || x.q.zor === r.zor) && (!plan.onayli || !x.q.durum || x.q.durum === 'o') && !taken.has(fp(x.q)));
+        // 1.11.2: bu sınıfa daha önce verilen soru hiç alınmaz; yıpranmış soru yalnız başka soru kalmazsa alınır
+        const cls = plan.sinifHaric !== false ? sinifNow() : '';
+        const cand = pool.filter((x) => konuFits(x.q, r.konu) && (!r.zor || x.q.zor === r.zor) && (!plan.onayli || !x.q.durum || x.q.durum === 'o') && !taken.has(fp(x.q)) && !(cls && givenTo(x.q, cls, used)));
         const fresh = [], old = [];
-        cand.forEach((x) => { const u = lastUse(x.q, used); if (u && plan.gun && u[0] > limit) old.push({ x, t: u[0] }); else fresh.push(x); });
+        cand.forEach((x) => { const u = lastUse(x.q, used); if ((u && plan.gun && u[0] > limit) || (plan.yipHaric !== false && isWorn(x.q, used))) old.push({ x, t: u ? u[0] : 0 }); else fresh.push(x); });
         // önce hiç kullanılmamış / eski kullanılmış (sınavdakiler önce), sonra en eski kullanılanlar
         const order = shuffle(fresh).sort((p, q) => (p.from === 'exam' ? 0 : 1) - (q.from === 'exam' ? 0 : 1)).concat(old.sort((p, q) => p.t - q.t).map((o) => o.x));
         const got = [];
@@ -720,7 +776,7 @@
     check();
   }
 
-  Object.assign(EK, { markUsed, lastUse, fp, onayModal, revModal, planModal, kitModal, glossaryModal, importModal, backupModal, applyGlossary, parseRows, konuFits });
+  Object.assign(EK, { markUsed, lastUse, usesOf, useCount, givenTo, isWorn, absorbUse, sinifNow, esikNow, poolFor, fp, onayModal, revModal, planModal, kitModal, glossaryModal, importModal, backupModal, applyGlossary, parseRows, konuFits });
   EK.addSide('btnPlOnay', () => t('plOnayBtn'), onayModal);
   EK.addSide('btnPlPlan', () => t('plPlanBtn'), planModal);
   EK.addSide('btnPlKit', () => t('plKitBtn'), kitModal);

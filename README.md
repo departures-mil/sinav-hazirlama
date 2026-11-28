@@ -59,3 +59,22 @@ eşitlenir; **kayıtlar bu depoda bulunmaz**.
 - **Terim sözlüğü** (`ek.sozluk`): `SOZLUK.AV`'nin önüne eklenir → çevrimdışı, Google düzeltmesi ve yapay zekâ isteminde öncelikli.
 - **Karne / başarı belgesi** (analiz penceresi), **toplu soru aktarma** (Excel/Word/CSV, başlık satırı tr/en/ar), **yedek**:
   30 dk'da bir (değiştiyse) + `yedek:dogrula` (yalnız okur). **Canlı sınav güvenli mod**: `/api/olay`, öğretmen panelinde ⚠ sayısı.
+
+## 1.11.2 — soru eskimesi, Part-66 ağırlığı, kılavuzdan soru, genişleyen denetim (`renderer/ek-yeni.js`)
+- **Soru eskimesi** (kenar çubuğu 🥀): kullanım kaydı artık sorunun içinde `q.kul: [[zaman, sınav, sınıf]]` (son 30) → bulut ve Wi-Fi
+  eşitlemesiyle bütün cihazlara gider; cihazdaki `ek.kullanim` açık sınavla birleştirilir (`EK.absorbUse`, dakikada bir). Eşik
+  (`prefs.eskiEsik`, varsayılan 4) kadar kullanılan ya da elle işaretlenen (`q.yip`) soru "yıprandı". `prefs.sinif` = şu anki sınıf:
+  müfredat planı o sınıfa verilmiş soruyu hiç almaz, yıpranmışı yalnız başka soru kalmazsa alır; çıktıda uyarı. "Taze soru koy":
+  aynı konu/zorlukta arşivden soru eklenir, eskisi hayalet olur (silinmez).
+- **Part-66 ağırlığı** (⚖): Appendix II soru sayıları (A1–A4, B1.1–B1.4, B2, B3), modül tanıma Konu alanından (M8, Modül 7, Module 11A,
+  8.2, modül adı). Çok modüllü sınavda paylar, tek modülde soru sayısı karşılaştırılır; alt konu ağırlıkları kurumunki (`prefs.p66.alt`).
+  `prefs.p66.uyar` açıksa çıktı öncesi uyarı (`EK.outputCheck`, app.js doOutput). Müfredat planı "EASA Part-66" hazırı App. II sayılarıyla dolar.
+- **Kılavuzdan soru** (📘): PDF metin katmanı, taranmış sayfa / görsel için `DocScan.ocrCanvas` (yerel zekâ ya da Tesseract), DOCX/TXT.
+  Yapay zekâ sırası: kullanıcının anahtarı → bilgisayardaki Ollama (`EK.localChat`) → terim sözlüğüyle boşluk doldurma. Sorular
+  `durum:'t'`, `kaynak` "Ad s. N", `rev`, `inceleme {n:'uretim', not: kanıt}`; kanıt belgede bulunamazsa ⚠.
+- **Soru denetimi**: olumsuz/belirsiz kök, soru biçimi, ipucu (kökteki sözcük, kesin ifade, "an"), üç dilde sayı farkı, terim sözlüğü;
+  yapay zekâ istemine ipucu ve resmî terim denetimi; anahtar yoksa Ollama; sorunlular `inceleme {n:'denetim'}` ile işaretlenir.
+- **Hız**: 120'den çok soruda kartlar ekrana yaklaşınca kurulur (`lazyCard` / `hydrateCard`, IntersectionObserver); arşiv araması
+  önceden hazırlanmış, aksan duyarsız metinle ve sözcüklerin hepsiyle.
+- Duman testi kalıcı kuralları da denetler: sağ üst 4 pencere düğmesi + Eşitle/Wi-Fi/Güncelle, açık/koyu mod ve şemalar, Ayarlar'da
+  kullanım limitleri ve çevrimdışı yapay zekâ, iletişim en sonda, güncellemede kalan MB / hız / yalnızca değişen kısımlar.

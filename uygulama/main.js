@@ -107,6 +107,54 @@ function smoke() {
           o.modalErrs = errs;
           return o;
         })()`);
+        // 1.11.2: soru eskimesi, Part-66 ağırlığı, kılavuzdan soru, soru denetimi, hızlı liste + kalıcı kurallara uygunluk
+        r.yeni = await mainWin.webContents.executeJavaScript(`(async () => { try {
+          const a = window.__app, E = window.EK, o = { side: document.querySelectorAll('.ekside [id^=btnYn]').length };
+          const q = a.newQuestion(); q.text.tr = 'Stol nedir?'; q.text.en = 'What is a stall?'; q.options[0].tr = 'a'; q.options[1].tr = 'b'; q.correct = 0; q.konu = 'M8 Temel Aerodinamik > 8.2 Stol';
+          q.kul = [[Date.now() - 86400000, 'Ara sınav', 'B1-26'], [Date.now() - 3 * 86400000, 'Quiz', 'B1-25']]; q.yip = true;
+          const n = a.normalizeExam({ ...a.newExam(), questions: [q] }).questions[0];
+          o.kul = Array.isArray(n.kul) && n.kul.length === 2 && n.kul[0][2] === 'B1-26' && n.yip === true;
+          o.worn = E.isWorn(n) && E.givenTo(n, 'b1-26') && !E.givenTo(n, 'B1-27') && E.useCount(n) === 2;
+          const m8 = E.modOf(n, 'B1.1'); o.mod = !!m8 && m8.id === '8' && m8.sub === '8.2 Stol';
+          o.mod7 = (E.modOf({ konu: 'Modül 7 Bakım' }, 'B3') || {}).id === '7B' && (E.modOf({ konu: 'Module 11' }, 'B1.2') || {}).id === '11B' && (E.modOf({ konu: 'Human Factors' }, 'B2') || {}).id === '9A' && !E.modOf({ konu: 'Meteoroloji' }, 'B1.1');
+          o.app2 = E.countOf66('5', 'B1.1') === 40 && E.countOf66('5', 'B1.2') === 20 && E.countOf66('13', 'B2') === 180 && E.countOf66('4', 'A1') === 0 && E.countOf66('11A', 'B1.1') === 140;
+          const mk = (k, i) => ({ id: 'x' + i, konu: k, text: { tr: 't' + i, en: '', ar: '' }, options: [], correct: 0 });
+          const qs = [...Array(10)].map((_, i) => mk('M8', i)).concat([...Array(10)].map((_, i) => mk('M10 Mevzuat', 10 + i)));
+          const an = E.analyze66(qs, 'B1.1', 5, {});
+          o.weights = an.rows.length === 2 && an.rows.find((x) => x.id === '10').bad && an.rows.find((x) => x.id === '8').target === 7;
+          const iss = E.offlineIssues({ text: { tr: 'Aşağıdakilerden hangisi stol nedeni değildir', en: 'Which of these is not the cause of a stall at 15 degrees', ar: 'أيّ مما يلي ليس سبب الانهيار عند 12 درجة' }, options: [0, 1, 2, 3, 4].map((k) => ({ tr: 'ş' + k, en: 'o' + k, ar: 'خ' + k })), correct: 0 }, 5, a.letters()).map((x) => x.k);
+          o.audit = iss.includes('au_negStem') && iss.includes('au_noQ') && iss.includes('au_numMis');
+          o.tok = E.tokensToText([{ text: 'B', x0: .5, x1: .6, y0: .1, y1: .12 }, { text: 'A', x0: .1, x1: .2, y0: .1, y1: .12 }, { text: 'C', x0: .1, x1: .2, y0: .2, y1: .22 }]) === 'A B\\nC';
+          o.ev = E.evidenceOk('the angle of attack exceeds the critical angle', 'A stall occurs when the angle of attack exceeds the critical angle of the wing.') && !E.evidenceOk('battery voltage', 'stall angle');
+          const cz = E.ruleGenerate([{ n: 3, text: 'During the pre-flight check the operator must inspect the propeller for cracks and damage before every flight of the aircraft.' }], { lang: 'en', count: 2 });
+          o.rule = cz.length >= 1 && cz[0].page === 3 && /_____/.test(cz[0].text.en);
+          // hızlı liste: 300 soruda kartların çoğu yer tutucu, kaydırınca kurulur, alanlar korunur
+          const ex = a.newExam(); ex.questions = [...Array(300)].map((_, i) => { const x = a.newQuestion(); x.text.tr = 'Soru ' + i; x.options[0].tr = 'a'; x.options[1].tr = 'b'; x.correct = 0; return x; });
+          const keep = a.exam; await a.openExamObject(ex, 'smoke');
+          await new Promise((r) => setTimeout(r, 300));
+          o.lazy = document.querySelectorAll('#qList .card.q.lazy').length > 200 && document.querySelectorAll('#qList .card.q').length === 300;
+          a.scrollToQ(ex.questions[250].id); await new Promise((r) => setTimeout(r, 200));
+          const c250 = document.getElementById('q-' + ex.questions[250].id); o.hydrate = !!c250 && !c250.classList.contains('lazy') && !!c250.querySelector('.stem');
+          await a.openExamObject(keep, 'smoke');
+          const errs = [];
+          for (const f of ['esModal', 'p66Modal', 'kgModal', 'auditModal']) {
+            try { await E[f](); await new Promise((r) => setTimeout(r, 400)); } catch (e) { errs.push(f + ': ' + e.message); }
+            document.querySelectorAll('#modalRoot .modal, #modalRoot > *').forEach((m) => m.remove());
+          }
+          o.modalErrs = errs;
+          // kalıcı kurallar: sağ üst düğmeler, temalar, Ayarlar (kullanım limitleri, çevrimdışı yapay zekâ, iletişim en son), güncelleme göstergesi
+          const s = window.Kabuk.settingsGrid(); document.body.appendChild(s);
+          const cards = [...s.querySelectorAll('[data-fc-card]')].map((c) => c.getAttribute('data-fc-card'));
+          o.rules = {
+            winBtns: document.querySelectorAll('.topbar .win-controls button').length, sync: !!document.querySelector('.topbar .sync-act'), lan: !!document.querySelector('.topbar .lan-act'), update: !!document.querySelector('.topbar .update-act'),
+            themes: ['light', 'dark'].every((x) => { try { FC.look.setTheme(x); return FC.look.effective() === x; } catch (e) { return false; } }) && FC.look.schemes().length >= 6,
+            usage: cards.includes('usage'), contactLast: cards[cards.length - 1] === 'contact', yz: !!s.querySelector('#yerelZeka') || !(window.FCYZ && FCYZ.available()),
+            langs: ['tr', 'en', 'ar'].every((l) => FC.i18n && FC.t && typeof FC.t('fc.p.speed') === 'string'), progress: ['fc.p.left', 'fc.p.speed', 'fc.update.patchMode'].every((k) => FC.t(k) && FC.t(k) !== k),
+            offlineTr: !!(window.Ceviri && window.SOZLUK), offlineOcr: !!(window.DocScan && DocScan.ocrCanvas),
+          };
+          FC.look.setTheme('dark'); s.remove();
+          return o;
+        } catch (e) { return { err: String(e && e.stack || e).slice(0, 600) }; } })()`);
         r.fullscreen = mainWin.isFullScreen(); r.appVersion = app.getVersion();
         r.errors = r.errors.concat(consoleErrors.filter((m) => !/net::|Failed to load resource|ERR_|raw\.githubusercontent|github\.com/.test(m)));
         clearTimeout(fail);

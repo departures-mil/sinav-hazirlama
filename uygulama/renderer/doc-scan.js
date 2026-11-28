@@ -472,5 +472,5 @@
     try { (await p).terminate(); } catch { /* yok */ }
   }
 
-  window.DocScan = { fromPdf, fromImage, buildRows, terminate, IMG_EXT, isImage: (ext) => IMG_EXT.includes(ext) };
+  window.DocScan = { fromPdf, fromImage, buildRows, terminate, ocrCanvas, prepCanvas, bitmapFrom, IMG_EXT, isImage: (ext) => IMG_EXT.includes(ext) };
 })();

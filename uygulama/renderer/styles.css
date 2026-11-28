@@ -697,3 +697,8 @@ input[type=text]:focus, textarea:focus, input[type=number]:focus { background: v
 .qdurum.d-o { color: #15803d; border-color: #22c55e; border-style: solid; }
 .qinc { font-size: 12px; padding: 2px 8px; border-radius: 6px; border: 1px solid #d97706; background: rgba(217, 119, 6, .12); color: #b45309; cursor: pointer; }
 .qused { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+/* 1.11.2: soru eskimesi rozetleri, hızlı liste yer tutucusu */
+.qworn { font-size: 11.5px; padding: 1px 7px; border-radius: 6px; border: 1px solid #b45309; color: #b45309; background: rgba(180, 83, 9, .10); white-space: nowrap; }
+.qcls { font-size: 11.5px; padding: 1px 7px; border-radius: 6px; border: 1px solid #c0392b; color: #c0392b; background: rgba(192, 57, 43, .10); white-space: nowrap; }
+.card.q.lazy { opacity: .55; }
+.card.q.lazy .qlazy { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }

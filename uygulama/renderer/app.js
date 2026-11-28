@@ -350,7 +350,8 @@ function refreshCorrect(card, q) {
 
 function rerenderCard(q, focusOpt) {
   const i = exam.questions.indexOf(q);
-  const old = document.getElementById('q-' + q.id);
+  const old = qCardEl(q.id);
+  if (!old) return;
   const fresh = questionCard(q, i);
   old.replaceWith(fresh);
   if (focusOpt != null) $(`.opt[data-k="${focusOpt}"] input`, fresh).focus();
@@ -456,11 +457,56 @@ function moveToModal(q) {
   setTimeout(() => inp.focus(), 30);
 }
 
+// 1.11.2: arşiv araması — sorunun aranacak metni bir kez (görseller hariç) hazırlanır; Türkçe / Arapça aksan duyarsız, sözcüklerin hepsi aranır
+const searchNorm = (s) => String(s || '').replace(/[İIı]/g, 'i').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f\u064b-\u065f\u0670\u0640]/g, '')
+  .replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+const searchCache = new WeakMap();
+function searchText(x) {
+  let h = searchCache.get(x);
+  if (h == null) {
+    const ml = (v) => (v ? [v.tr, v.en, v.ar].join(' ') : '');
+    h = searchNorm([ml(x.text), ml(x.title), ...(x.options || []).map(ml), ...(x.questions || []).map((y) => ml(y && y.text) + ' ' + ml(y && y.answer)), x.konu || '', x.kaynak || '', x.term || ''].join(' '));
+    searchCache.set(x, h);
+  }
+  return h;
+}
+// 1.11.2: çok soruda (>120) kartlar ekrana yaklaşınca kurulur; önce hafif yer tutucu çizilir (liste ve arama hızlanır)
+const LAZY_N = 120;
+let lazyIO = null;
+function lazyCard(q, i) {
+  const c = document.createElement('section');
+  c.className = 'card q lazy' + (q.ghost ? ' ghost' : '');
+  c.id = 'q-' + q.id;
+  c.dataset.i = i;
+  c.style.minHeight = (q.img ? 380 : 250) + 'px';
+  const tx = (q.text[CL()] || q.text.tr || q.text.en || q.text.ar || '').slice(0, 160);
+  c.innerHTML = `<div class="qhead"><div class="qnum">${q.ghost ? '👻' : qNumber(q)}</div><span class="qlazy" dir="auto">${esc(tx)}</span></div>`;
+  return c;
+}
+function hydrateCard(el) {
+  if (!el || !el.classList.contains('lazy')) return el;
+  const q = exam.questions.find((x) => 'q-' + x.id === el.id);
+  if (!q) return el;
+  const fresh = questionCard(q, exam.questions.indexOf(q));
+  if (el.style.display === 'none') fresh.style.display = 'none';
+  if (lazyIO) lazyIO.unobserve(el);
+  el.replaceWith(fresh);
+  return fresh;
+}
+const qCardEl = (id) => hydrateCard(document.getElementById('q-' + id));
 function renderList() {
   const box = $('#qList');
+  if (lazyIO) { lazyIO.disconnect(); lazyIO = null; }
   box.innerHTML = '';
   const frag = document.createDocumentFragment();
-  exam.questions.forEach((q, i) => { const c = questionCard(q, i); if (!tagMatch(q, qFilter)) c.style.display = 'none'; frag.appendChild(c); });
+  const lazy = exam.questions.length > LAZY_N && typeof IntersectionObserver === 'function';
+  if (lazy) lazyIO = new IntersectionObserver((ents) => { ents.forEach((e) => { if (e.isIntersecting) hydrateCard(e.target); }); }, { rootMargin: '1600px 0px' });
+  exam.questions.forEach((q, i) => {
+    const c = lazy && i >= 12 ? lazyCard(q, i) : questionCard(q, i);
+    if (!tagMatch(q, qFilter)) c.style.display = 'none';
+    frag.appendChild(c);
+    if (lazyIO && c.classList.contains('lazy')) lazyIO.observe(c);
+  });
   box.appendChild(frag);
   $('#emptyMsg').style.display = exam.questions.length ? 'none' : '';
   const fb = $('#filterBar');
@@ -501,7 +547,7 @@ function updateSide() {
       const q = exam.questions.find((x) => x.id === s.dataset.id);
       snap(); q.correct = +s.value;
       const card = document.getElementById('q-' + q.id);
-      if (card) refreshCorrect(card, q);
+      if (card && !card.classList.contains('lazy')) refreshCorrect(card, q);
       updateSide(); changed();
     };
   });
@@ -510,7 +556,7 @@ function updateSide() {
 }
 
 function scrollToQ(id, focus) {
-  const el = document.getElementById('q-' + id);
+  const el = qCardEl(id);
   if (!el) return;
   el.scrollIntoView({ block: 'center' });
   el.animate([{ boxShadow: '0 0 0 3px #1f5fbf' }, { boxShadow: '0 0 0 0 transparent' }], { duration: 900 });
@@ -1546,10 +1592,10 @@ async function translateQuestion(q) {
   });
   if (!tasks.length) return toast(t('translateNoSource'), 'warn');
   snap();
-  const card = document.getElementById('q-' + q.id);
-  card.style.opacity = '.55';
+  const card = qCardEl(q.id);
+  if (card) card.style.opacity = '.55';
   const r = await runPool(tasks, 4);
-  card.style.opacity = '';
+  if (card) card.style.opacity = '';
   rerenderCard(q);
   if (r.failed) toast(t('translateErr'), 'err'); else toast(t('translatedQ'), 'ok');
 }
@@ -1881,7 +1927,7 @@ async function bankModal(kind, startTab = 'auto', preset = '') {
     let all = (srcSel === 'mine' ? [] : bankL).concat(srcSel === 'bank' ? [] : mineL);
     if (lv) all = all.filter((x) => x.lvl === lv);
     if (top) all = all.filter((x) => x.topic === top);
-    if (q) all = all.filter((x) => JSON.stringify([x.text, x.title, x.options, x.questions]).toLocaleLowerCase('tr').includes(q));
+    if (q) { const words = searchNorm(q).split(' ').filter(Boolean); all = all.filter((x) => { const h = searchText(x); return words.every((w) => h.includes(w)); }); }
     const sigs = examSigs(), used = B.usedSet();
     const shown = all.slice(0, 600);
     lists.arch = shown;
@@ -2371,6 +2417,8 @@ function fileBase(variant, lang, sections) {
 }
 async function doOutput(variant, kind, lang, opts = {}) {
   const model = buildModel(variant, lang, opts);
+  // 1.11.2: aynı sınıfa verilmiş soru ve Part-66 ağırlık uyarısı (çıktıyı durdurmaz)
+  if (variant !== 'key' && window.EK.outputCheck) window.EK.outputCheck(model);
   await window.EK.prepareModelImages(model);
   const fname = fileBase(variant, lang, opts.sections) + (model.lang2 ? '-' + model.lang2 : '');
   const busy = toast(t('exporting'), '', [], 2000);
